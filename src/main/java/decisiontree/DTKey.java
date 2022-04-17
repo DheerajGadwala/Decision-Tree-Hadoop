@@ -64,24 +64,23 @@ public class DTKey implements WritableComparable<DTKey> {
 
   @Override
   public int hashCode() {
-    return hash(split.get(), splitPoint.get(), featureId.get());
+    return hash(splitPoint.get(), featureId.get());
   }
 
   @Override
   public int compareTo(DTKey that) {
-
     int splitCmp = this.split.compareTo(that.split);
     int splitPointCmp = this.splitPoint.compareTo(that.splitPoint);
     int featureIdCmp = this.featureId.compareTo(that.featureId);
     int dummyCmp = -this.dummy.compareTo(that.dummy);
 
-    if (splitCmp == 0) {
+    if (featureIdCmp == 0) {
       if (splitPointCmp == 0) {
-        if (featureIdCmp == 0) {
+        if (splitCmp == 0) {
           return dummyCmp;
         }
         else {
-          return featureIdCmp;
+          return splitCmp;
         }
       }
       else {
@@ -89,7 +88,7 @@ public class DTKey implements WritableComparable<DTKey> {
       }
     }
     else {
-      return splitCmp;
+      return featureIdCmp;
     }
   }
 

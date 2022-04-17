@@ -28,7 +28,7 @@ public class DecisionTree extends Configured implements Tool {
 
     @Override
     public void map(final Object key, final Text value, final Context context) throws IOException, InterruptedException {
-      System.out.println("mapperDheeraj");
+
       final StringTokenizer itr = new StringTokenizer(value.toString(), "\n");
       while (itr.hasMoreTokens()) {
 
@@ -36,6 +36,24 @@ public class DecisionTree extends Configured implements Tool {
 
         for (int featureId = 0; featureId < 700; featureId++) {
           for (double splitPoint: splitPoints) {
+
+            context.write(
+                new DTKey(true, 0, splitPoint, featureId)
+                , new DTValue(0.0, 0)
+            ); // In case no records lie in split 0
+            context.write(
+                new DTKey(true, 1, splitPoint, featureId)
+                , new DTValue(0.0, 0)
+            ); // In case no records lie in split 1
+            context.write(
+                new DTKey(false, 0, splitPoint, featureId)
+                , new DTValue(0.0, 0)
+            ); // In case no records lie in split 0
+            context.write(
+                new DTKey(false, 1, splitPoint, featureId)
+                , new DTValue(0.0, 0)
+            ); // In case no records lie in split 1
+
             if (r.getFeature(featureId) < splitPoint) {
 
               DTKey dummyEmitKeyForSplit_0 = new DTKey(true, 0, splitPoint, featureId);
@@ -78,27 +96,69 @@ public class DecisionTree extends Configured implements Tool {
 
   public static class SplitReducer extends Reducer<DTKey, DTValue, DTKey, DTValue> {
 
-    double mean;
-    int count;
+    Double meanOfSplit_1;
+    Double meanOfSplit_2;
+    Integer countOfSplit_1;
+    Integer countOfSplit_2;
+    Double varianceOfSplit_1;
+    Double varianceOfSplit_2;
+
 
     @Override
     public void reduce(final DTKey key, final Iterable<DTValue> values, final Context context) throws IOException, InterruptedException {
-      System.out.println(key);
+
       if (key.dummy.get()) {
-        mean = 0.0;
-        count = 0;
+
+        double mean = 0.0;
+        int count = 0;
         for (DTValue valueComps: values) {
-          mean += valueComps.value.get() * valueComps.count.get();
+          mean += valueComps.value.get();
           count += valueComps.count.get();
+        }
+        if (count != 0) {
+          mean /= count;
+        }
+
+        if (meanOfSplit_1 == null) {
+          meanOfSplit_1 = mean;
+          countOfSplit_1 = count;
+        }
+        else if (meanOfSplit_2 == null) {
+          meanOfSplit_2 = mean;
+          countOfSplit_2 = count;
         }
       }
       else {
-        double variance = 0.0;
-        for (DTValue valueComps: values) {
-          variance += Math.pow(mean - valueComps.value.get(), 2);
+        if (meanOfSplit_2 != null) {
+          double variance = 0.0;
+          for (DTValue valueComps: values) {
+            variance += Math.pow(meanOfSplit_2 - valueComps.value.get(), 2);
+          }
+          if (countOfSplit_2 != 0) {
+            variance = Math.sqrt(variance/countOfSplit_2);
+          }
+          varianceOfSplit_2 = variance;
         }
-        variance = Math.sqrt(variance/count);
-        context.write(key, new DTValue(variance, count));
+        else if (meanOfSplit_1 != null) {
+          double variance = 0.0;
+          for (DTValue valueComps: values) {
+            variance += Math.pow(meanOfSplit_1 - valueComps.value.get(), 2);
+          }
+          if (countOfSplit_1 != 0) {
+            variance = Math.sqrt(variance/countOfSplit_1);
+          }
+          varianceOfSplit_1 = variance;
+        }
+        if (varianceOfSplit_1 != null && varianceOfSplit_2 != null) {
+          double varianceForSplit = (varianceOfSplit_1 * countOfSplit_1 + varianceOfSplit_2 * countOfSplit_2) / (countOfSplit_1 + countOfSplit_2);
+          context.write(key, new DTValue(varianceForSplit, countOfSplit_1 + countOfSplit_2));
+          meanOfSplit_1 = null;
+          meanOfSplit_2 = null;
+          countOfSplit_1 = null;
+          countOfSplit_2 = null;
+          varianceOfSplit_1 = null;
+          varianceOfSplit_2 = null;
+        }
       }
     }
   }
@@ -142,6 +202,7 @@ public class DecisionTree extends Configured implements Tool {
 
   @Override
   public int run(final String[] args) throws Exception {
+
     final Configuration conf = getConf();
     final Job job = Job.getInstance(conf, "Decision Tree");
     job.setJarByClass(DecisionTree.class);
@@ -155,11 +216,14 @@ public class DecisionTree extends Configured implements Tool {
     job.setOutputValueClass(DTValue.class);
     job.setGroupingComparatorClass(GroupingComparator.class);
     job.setCombinerKeyGroupingComparatorClass(GroupingComparator.class);
+    job.setNumReduceTasks(3);
 
     FileInputFormat.addInputPath(job, new Path(args[0]));
     FileOutputFormat.setOutputPath(job, new Path(args[1]));
 
-    return job.waitForCompletion(true) ? 0 : 1;
+    job.waitForCompletion(true);
+
+    return 1;
   }
 
   public static void main(final String[] args) {
