@@ -1,6 +1,8 @@
 package decisiontree;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.StringTokenizer;
 
 import org.apache.hadoop.conf.Configuration;
@@ -24,7 +26,7 @@ public class DecisionTree extends Configured implements Tool {
 
   public static class SplitMapper extends Mapper<Object, Text, DTKey, DTValue> {
 
-    double[] splitPoints = new double[] {0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9};
+    double[] splitPoints = new double[] {0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0};
 
     @Override
     public void map(final Object key, final Text value, final Context context) throws IOException, InterruptedException {
@@ -82,15 +84,19 @@ public class DecisionTree extends Configured implements Tool {
 
     @Override
     public void reduce(final DTKey key, final Iterable<DTValue> values, final Context context) throws IOException, InterruptedException {
-      double sumValue = 0.0;
-      int sumCount = 0;
 
-      for (DTValue value: values) {
-        sumValue += value.value.get();
-        sumCount += value.count.get();
+      // Possible predictions: {0, 1, 2, 3, 4}
+      // Counting occurrences each of ratings
+      Map<Double, Integer> mp = new HashMap<>();
+      for (double i = 0.0; i <= 4; i++) {
+        mp.put(i, 0);
       }
-
-      context.write(key, new DTValue(sumValue, sumCount));
+      for (DTValue value: values) {
+        mp.put(value.value.get(), mp.get(value.value.get()) + value.count.get());
+      }
+      for (double i = 0.0; i <= 4; i++) {
+        context.write(key, new DTValue(i, mp.get(i)));
+      }
     }
   }
 
@@ -103,7 +109,6 @@ public class DecisionTree extends Configured implements Tool {
     Double varianceOfSplit_1;
     Double varianceOfSplit_2;
 
-
     @Override
     public void reduce(final DTKey key, final Iterable<DTValue> values, final Context context) throws IOException, InterruptedException {
 
@@ -112,7 +117,7 @@ public class DecisionTree extends Configured implements Tool {
         double mean = 0.0;
         int count = 0;
         for (DTValue valueComps: values) {
-          mean += valueComps.value.get();
+          mean += valueComps.value.get() * valueComps.count.get();
           count += valueComps.count.get();
         }
         if (count != 0) {
@@ -132,20 +137,20 @@ public class DecisionTree extends Configured implements Tool {
         if (meanOfSplit_2 != null) {
           double variance = 0.0;
           for (DTValue valueComps: values) {
-            variance += Math.pow(meanOfSplit_2 - valueComps.value.get(), 2);
+            variance += valueComps.count.get() * Math.pow(meanOfSplit_2 - valueComps.value.get(), 2);
           }
           if (countOfSplit_2 != 0) {
-            variance = Math.sqrt(variance/countOfSplit_2);
+            variance = variance/countOfSplit_2;
           }
           varianceOfSplit_2 = variance;
         }
         else if (meanOfSplit_1 != null) {
           double variance = 0.0;
           for (DTValue valueComps: values) {
-            variance += Math.pow(meanOfSplit_1 - valueComps.value.get(), 2);
+            variance += valueComps.count.get() * Math.pow(meanOfSplit_1 - valueComps.value.get(), 2);
           }
           if (countOfSplit_1 != 0) {
-            variance = Math.sqrt(variance/countOfSplit_1);
+            variance = variance/countOfSplit_1;
           }
           varianceOfSplit_1 = variance;
         }
@@ -216,7 +221,6 @@ public class DecisionTree extends Configured implements Tool {
     job.setOutputValueClass(DTValue.class);
     job.setGroupingComparatorClass(GroupingComparator.class);
     job.setCombinerKeyGroupingComparatorClass(GroupingComparator.class);
-    job.setNumReduceTasks(3);
 
     FileInputFormat.addInputPath(job, new Path(args[0]));
     FileOutputFormat.setOutputPath(job, new Path(args[1]));
