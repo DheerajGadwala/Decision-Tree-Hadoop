@@ -18,15 +18,18 @@ public class DTKey implements WritableComparable<DTKey> {
   IntWritable split;
   DoubleWritable splitPoint;
   IntWritable featureId;
+  IntWritable nodeId;
 
   public DTKey() {
+    this.nodeId = new IntWritable(0);
     this.dummy = new BooleanWritable(false);
     this.split = new IntWritable(0);
     this.splitPoint = new DoubleWritable(0.0);
     this.featureId = new IntWritable(0);
   }
 
-  public DTKey(boolean dummy, int split, double splitPoint, int featureId) {
+  public DTKey(int nodeId, boolean dummy, int split, double splitPoint, int featureId) {
+    this.nodeId = new IntWritable(nodeId);
     this.dummy = new BooleanWritable(dummy);
     this.split = new IntWritable(split);
     this.splitPoint = new DoubleWritable(splitPoint);
@@ -35,6 +38,7 @@ public class DTKey implements WritableComparable<DTKey> {
 
   @Override
   public void write(DataOutput dataOutput) throws IOException {
+    nodeId.write(dataOutput);
     dummy.write(dataOutput);
     split.write(dataOutput);
     splitPoint.write(dataOutput);
@@ -43,6 +47,7 @@ public class DTKey implements WritableComparable<DTKey> {
 
   @Override
   public void readFields(DataInput dataInput) throws IOException {
+    nodeId.readFields(dataInput);
     dummy.readFields(dataInput);
     split.readFields(dataInput);
     splitPoint.readFields(dataInput);
@@ -64,36 +69,43 @@ public class DTKey implements WritableComparable<DTKey> {
 
   @Override
   public int hashCode() {
-    return hash(splitPoint.get(), featureId.get());
+    return hash(nodeId.get(), splitPoint.get(), featureId.get());
   }
 
   @Override
   public int compareTo(DTKey that) {
+
+    int nodeIdCmp = this.nodeId.compareTo(that.nodeId);
     int splitCmp = this.split.compareTo(that.split);
     int splitPointCmp = this.splitPoint.compareTo(that.splitPoint);
     int featureIdCmp = this.featureId.compareTo(that.featureId);
     int dummyCmp = -this.dummy.compareTo(that.dummy);
 
-    if (featureIdCmp == 0) {
-      if (splitPointCmp == 0) {
-        if (splitCmp == 0) {
-          return dummyCmp;
+    if (nodeIdCmp == 0) {
+      if (featureIdCmp == 0) {
+        if (splitPointCmp == 0) {
+          if (splitCmp == 0) {
+            return dummyCmp;
+          }
+          else {
+            return splitCmp;
+          }
         }
         else {
-          return splitCmp;
+          return splitPointCmp;
         }
       }
       else {
-        return splitPointCmp;
+        return featureIdCmp;
       }
     }
     else {
-      return featureIdCmp;
+      return nodeIdCmp;
     }
   }
 
   @Override
   public String toString() {
-    return featureId.toString() + " " + splitPoint.toString() + " " + split.toString() + " " + dummy.toString();
+    return nodeId.toString() + " " + featureId.toString() + " " + splitPoint.toString() + " " + split.toString() + " " + dummy.toString();
   }
 }

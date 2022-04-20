@@ -19,7 +19,7 @@ aws.bucket.name=drgad24dt
 aws.train=train
 aws.output=output
 aws.log.dir=logMR
-aws.num.nodes=5
+aws.num.nodes=8
 aws.instance.type=m4.xlarge
 
 # -----------------------------------------------------------
@@ -110,7 +110,7 @@ upload-app-aws:
 # Main EMR launch.
 aws: jar upload-app-aws delete-output-aws
 	aws emr create-cluster \
-		--name "Decision Tree Best Split" \
+		--name "Decision Tree Best Split 10 machines" \
 		--release-label ${aws.emr.release} \
 		--instance-groups '[{"InstanceCount":${aws.num.nodes},"InstanceGroupType":"CORE","InstanceType":"${aws.instance.type}"},{"InstanceCount":1,"InstanceGroupType":"MASTER","InstanceType":"${aws.instance.type}"}]' \
 	    --applications Name=Hadoop \

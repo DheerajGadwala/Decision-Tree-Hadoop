@@ -18,29 +18,29 @@ import java.util.Map.Entry;
  */
 public class Record implements Writable {
 
-  private IntWritable queryId;
-  private IntWritable rating;
-  private Map<IntWritable, DoubleWritable> features;
-  private static DoubleWritable ZERO = new DoubleWritable(0.0);
+  private final IntWritable nodeId;
+  private final IntWritable queryId;
+  private final IntWritable rating;
+  private static final DoubleWritable ZERO = new DoubleWritable(0.0);
+  private final Map<IntWritable, DoubleWritable> features;
 
   public Record() {
+    this.nodeId = new IntWritable();
     this.queryId = new IntWritable();
     this.rating = new IntWritable();
     this.features = new HashMap<>();
   }
 
-  public Record(int queryId, int rating) {
-    this.queryId = new IntWritable(queryId);
-    this.rating = new IntWritable(rating);
-    this.features = new HashMap<>();
-  }
-
   public Record(String input) {
+
     String[] parts = input.split(" ");
-    queryId = new IntWritable(Integer.parseInt(parts[1].substring(4)));
-    rating = new IntWritable(Integer.parseInt(parts[0]));
+
+    nodeId = new IntWritable(Integer.parseInt(parts[0]));
+    queryId = new IntWritable(Integer.parseInt(parts[2].substring(4)));
+    rating = new IntWritable(Integer.parseInt(parts[1]));
     this.features = new HashMap<>();
-    for (int i = 2; i < parts.length; i++) {
+
+    for (int i = 3; i < parts.length; i++) {
       String[] id_val = parts[i].split(":");
       IntWritable featureId = new IntWritable(Integer.parseInt(id_val[0]));
       DoubleWritable featureValue = new DoubleWritable(Double.parseDouble(id_val[1]));
@@ -59,6 +59,7 @@ public class Record implements Writable {
   @Override
   public void write(DataOutput dataOutput) throws IOException {
 
+    nodeId.write(dataOutput);
     queryId.write(dataOutput);
     rating.write(dataOutput);
     new IntWritable(features.size()).write(dataOutput);
@@ -72,12 +73,13 @@ public class Record implements Writable {
   @Override
   public void readFields(DataInput dataInput) throws IOException {
 
+    nodeId.readFields(dataInput);
     queryId.readFields(dataInput);
     rating.readFields(dataInput);
 
     IntWritable countOfFeatures = new IntWritable();
     countOfFeatures.readFields(dataInput);
-    this.features = new HashMap<>();
+    this.features.clear();
 
     for (int i = 0; i < countOfFeatures.get(); i++) {
       IntWritable featureId = new IntWritable();
@@ -90,9 +92,13 @@ public class Record implements Writable {
 
   @Override
   public String toString() {
+
     StringBuilder sb = new StringBuilder();
-    sb.append(rating.toString()).append(" qid:");
-    sb.append(queryId.toString());
+    sb.append(nodeId.toString())
+        .append(" ")
+        .append(rating.toString()).append(" qid:")
+        .append(queryId.toString());
+
     for (Entry<IntWritable, DoubleWritable> feature: features.entrySet()) {
       IntWritable featureId = feature.getKey();
       DoubleWritable featureValue = feature.getValue();
@@ -101,10 +107,15 @@ public class Record implements Writable {
           .append(":")
           .append(featureValue.toString());
     }
+
     return sb.toString();
   }
 
   public DoubleWritable getRating() {
     return new DoubleWritable(rating.get());
+  }
+
+  public int getNodeId() {
+    return nodeId.get();
   }
 }

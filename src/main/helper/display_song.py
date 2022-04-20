@@ -25,7 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
 import os
-import sys
+import sys2w3
 import hdf5_getters
 import numpy as np
 
