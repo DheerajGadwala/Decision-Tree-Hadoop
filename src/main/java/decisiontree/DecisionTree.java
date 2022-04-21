@@ -13,7 +13,7 @@ import org.apache.hadoop.io.WritableComparator;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.lib.input.NLineInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -25,7 +25,7 @@ public class DecisionTree extends Configured implements Tool {
 
   public static class SplitMapper extends Mapper<Object, Text, DTKey, DTValue> {
 
-    double[] splitPoints = new double[] {0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0};
+    double[] splitPoints = new double[] {0.25, 0.5, 0.75};
 
     @Override
     public void map(final Object key, final Text value, final Context context) throws IOException, InterruptedException {
@@ -110,16 +110,18 @@ public class DecisionTree extends Configured implements Tool {
    */
   public static class SplitReducer extends Reducer<DTKey, DTValue, Text, Text> {
 
-    Map<Integer, DTKey> smallestKeyMap = new HashMap<>();
-    Map<Integer, Double> smallestVarianceMap = new HashMap<>();
-    Map<Integer, Double> smallestMeanMap = new HashMap<>();
+    Map<Integer, Split> smallestVarianceMap = new HashMap<>();
 
-    Double meanOfSplit_1;
-    Double meanOfSplit_2;
-    Integer countOfSplit_1;
-    Integer countOfSplit_2;
-    Double varianceOfSplit_1;
-    Double varianceOfSplit_2;
+    double meanOfSplit_1;
+    double meanOfSplit_2;
+    int countOfSplit_1;
+    int countOfSplit_2;
+    double varianceOfSplit_1;
+    double varianceOfSplit_2;
+    boolean mean1_isSet = false;
+    boolean mean2_isSet = false;
+    boolean variance1_isSet = false;
+    boolean variance2_isSet = false;
 
     @Override
     public void reduce(final DTKey key, final Iterable<DTValue> values, final Context context) {
@@ -137,13 +139,15 @@ public class DecisionTree extends Configured implements Tool {
           mean /= count;
         }
 
-        if (meanOfSplit_1 == null) {
+        if (!mean1_isSet) {
           meanOfSplit_1 = mean;
           countOfSplit_1 = count;
+          mean1_isSet = true;
         }
-        else if (meanOfSplit_2 == null) {
+        else if (!mean2_isSet) {
           meanOfSplit_2 = mean;
           countOfSplit_2 = count;
+          mean2_isSet = true;
         }
       }
       // If not dummy, then find variance.
@@ -151,7 +155,7 @@ public class DecisionTree extends Configured implements Tool {
 
         int nodeId = key.nodeId.get();
 
-        if (meanOfSplit_2 != null) {
+        if (mean2_isSet) {
           double variance = 0.0;
           for (DTValue valueComps: values) {
             variance += valueComps.count.get() * Math.pow(meanOfSplit_2 - valueComps.value.get(), 2);
@@ -160,8 +164,9 @@ public class DecisionTree extends Configured implements Tool {
             variance = variance/countOfSplit_2;
           }
           varianceOfSplit_2 = variance;
+          variance2_isSet = true;
         }
-        else if (meanOfSplit_1 != null) {
+        else if (mean1_isSet) {
           double variance = 0.0;
           for (DTValue valueComps: values) {
             variance += valueComps.count.get() * Math.pow(meanOfSplit_1 - valueComps.value.get(), 2);
@@ -170,42 +175,56 @@ public class DecisionTree extends Configured implements Tool {
             variance = variance/countOfSplit_1;
           }
           varianceOfSplit_1 = variance;
+          variance1_isSet = true;
         }
-        if (varianceOfSplit_1 != null && varianceOfSplit_2 != null) {
+        if (variance1_isSet && variance2_isSet) {
+
           double varianceForSplit = (
-              varianceOfSplit_1 * countOfSplit_1 + varianceOfSplit_2 * countOfSplit_2
+              varianceOfSplit_1 * countOfSplit_1
+                  + varianceOfSplit_2 * countOfSplit_2
           ) / (countOfSplit_1 + countOfSplit_2);
-          if (varianceForSplit < smallestVarianceMap.getOrDefault(nodeId, Double.MAX_VALUE)) {
 
-            double mean = (
-                meanOfSplit_1 * countOfSplit_1 + meanOfSplit_2 * countOfSplit_2
-            ) / (countOfSplit_1 + countOfSplit_2);
+          double mean = (
+              meanOfSplit_1 * countOfSplit_1
+                  + meanOfSplit_2 * countOfSplit_2
+          ) / (countOfSplit_1 + countOfSplit_2);
 
-            smallestVarianceMap.put(nodeId, varianceForSplit);
-            smallestMeanMap.put(nodeId, mean);
-            smallestKeyMap.put(nodeId, key);
+          if (
+              !smallestVarianceMap.containsKey(nodeId)
+                  ||
+              (smallestVarianceMap.containsKey(nodeId)
+                  &&
+              varianceForSplit < smallestVarianceMap.get(nodeId).variance
+              )
+          ) {
+            Split split = new Split(
+                nodeId, key.featureId.get(),
+                key.splitPoint.get(), varianceForSplit, mean,
+                countOfSplit_1 == 0 || countOfSplit_2 == 0
+            );
+            smallestVarianceMap.put(nodeId, split);
           }
-          meanOfSplit_1 = null;
-          meanOfSplit_2 = null;
-          countOfSplit_1 = null;
-          countOfSplit_2 = null;
-          varianceOfSplit_1 = null;
-          varianceOfSplit_2 = null;
+          mean1_isSet = false;
+          mean2_isSet = false;
+          countOfSplit_1 = 0;
+          countOfSplit_2 = 0;
+          variance1_isSet = false;
+          variance2_isSet = false;
         }
       }
     }
 
     @Override
     public void cleanup(final Context context) throws IOException, InterruptedException {
-      for (int nodeId: smallestKeyMap.keySet()) {
+      for (int nodeId: smallestVarianceMap.keySet()) {
 
-        DTKey smallestKey = smallestKeyMap.get(nodeId);
+        Split bestSplit = smallestVarianceMap.get(nodeId);
 
         Text key = new Text(
-            nodeId + " " + smallestKey.featureId + " " + smallestKey.splitPoint
+            nodeId + " " + bestSplit.featureId + " " + bestSplit.splitPoint
         );
         Text value = new Text(
-            smallestVarianceMap.get(nodeId) + " " + smallestMeanMap.get(nodeId)
+            bestSplit.variance + " " + bestSplit.nodeId + " " + bestSplit.isPure
         );
 
         context.write(key, value);
@@ -230,6 +249,47 @@ public class DecisionTree extends Configured implements Tool {
     }
   }
 
+  public static class processDataMapper extends Mapper<Object, Text, Record, NullWritable> {
+
+    Map<Integer, Split> nodesPresent;
+
+    @Override
+    public void setup(final Context context) throws IOException {
+      nodesPresent = new HashMap<>();
+      Path[] filePaths = context.getLocalCacheFiles();
+      for(Path filePath: filePaths) {
+        FileInputStream fis = new FileInputStream(new File(filePath.toUri().getPath()));
+        BufferedReader br = new BufferedReader(new InputStreamReader(fis));
+        String line;
+        while ((line = br.readLine()) != null && !line.equals("")) {
+          Split split = new Split(line);
+          int nodeId = split.nodeId;
+          nodesPresent.put(nodeId, split);
+        }
+      }
+    }
+
+    @Override
+    public void map(final Object key, final Text value, final Context context) throws IOException, InterruptedException {
+
+      final StringTokenizer itr = new StringTokenizer(value.toString(), "\n");
+      while (itr.hasMoreTokens()) {
+        Record r = new Record(itr.nextToken());
+        if (nodesPresent.containsKey(r.getNodeId())) {
+          Split split = nodesPresent.get(r.getNodeId());
+          if (r.getFeature(split.featureId) < split.splitPoint) {
+            r.setNodeId(2*r.getNodeId());
+          }
+          else {
+            r.setNodeId(2*r.getNodeId()+1);
+          }
+          context.write(r, null);
+        }
+      }
+    }
+
+  }
+
   public static class preProcessMapper extends Mapper<Object, Text, Record, NullWritable> {
 
     @Override
@@ -238,6 +298,12 @@ public class DecisionTree extends Configured implements Tool {
       final StringTokenizer itr = new StringTokenizer(value.toString(), "\n");
       while (itr.hasMoreTokens()) {
         Record r = new Record("1 "+itr.nextToken());
+//        if (r.getRating().get() >= 3) {
+//          r.setRating(1);
+//        }
+//        else {
+//          r.setRating(0);
+//        }
         context.write(r, null);
       }
     }
@@ -252,14 +318,15 @@ public class DecisionTree extends Configured implements Tool {
     job.setJarByClass(DecisionTree.class);
     final Configuration jobConf = job.getConfiguration();
     jobConf.set("mapreduce.output.textoutputformat.separator", " ");
-    jobConf.setInt("mapreduce.input.lineinputformat.linespermap", 1000);
+    //jobConf.setInt("mapreduce.input.lineinputformat.linespermap", 1000);
 
     job.setMapperClass(preProcessMapper.class);
-    job.setOutputKeyClass(Text.class);
+    job.setOutputKeyClass(Record.class);
     job.setOutputValueClass(NullWritable.class);
-    job.setInputFormatClass(NLineInputFormat.class);
+    //job.setInputFormatClass(NLineInputFormat.class);
     job.setNumReduceTasks(0);
-    NLineInputFormat.addInputPath(job, new Path(args[0]));
+
+    FileInputFormat.addInputPath(job, new Path(args[0]));
     FileOutputFormat.setOutputPath(job, new Path("layer/1"));
 
     job.waitForCompletion(true);
@@ -271,22 +338,34 @@ public class DecisionTree extends Configured implements Tool {
     double splitPoint;
     double variance;
     double mean;
+    boolean isPure;
 
-    Split(int nodeId, int featureId, double splitPoint, double variance, double mean) {
+    Split(int nodeId, int featureId, double splitPoint, double variance, double mean, boolean isPure) {
       this.nodeId = nodeId;
       this.featureId = featureId;
       this.splitPoint = splitPoint;
       this.variance = variance;
       this.mean = mean;
+      this.isPure = isPure;
+    }
+
+    Split(String line) {
+      String[] data = line.split(" ");
+      nodeId = Integer.parseInt(data[0]);
+      featureId = Integer.parseInt(data[1]);
+      splitPoint = Double.parseDouble(data[2]);
+      variance = Double.parseDouble(data[3]);
+      mean = Double.parseDouble(data[4]);
+      isPure = Boolean.parseBoolean(data[5]);
     }
 
     @Override
     public String toString() {
-      return "" + nodeId + " " + featureId + " " + splitPoint + "\n";
+      return "" + nodeId + " " + featureId + " " + splitPoint + " " + variance + " " + mean + " " + isPure + "\n";
     }
   }
 
-  public void decideSplits(String[] args, int numberOfReduceTasks, int layerCount) throws IOException {
+  public boolean decideSplits(String[] args, int numberOfReduceTasks, int layerCount) throws IOException {
 
     Map<Integer, Split> id_split_map = new HashMap<>();
 
@@ -308,18 +387,16 @@ public class DecisionTree extends Configured implements Tool {
       String line;
       while ((line = br.readLine()) != null && !line.equals("")) {
 
-        String[] data = line.split(" ");
-        int nodeId = Integer.parseInt(data[0]);
-        int featureId = Integer.parseInt(data[1]);
-        double splitPoint = Double.parseDouble(data[2]);
-        double variance = Double.parseDouble(data[3]);
-        double mean = Double.parseDouble(data[4]);
-        Split split = new Split(nodeId, featureId, splitPoint, variance, mean);
-        if (!id_split_map.containsKey(nodeId)) {
-          id_split_map.put(nodeId, split);
-        }
-        else if (id_split_map.get(nodeId).variance > split.variance) {
-          id_split_map.put(nodeId, split);
+        Split split = new Split(line);
+        int nodeId = split.nodeId;
+
+        if (!split.isPure) {
+          if (!id_split_map.containsKey(nodeId)) {
+            id_split_map.put(nodeId, split);
+          }
+          else if (id_split_map.get(nodeId).variance > split.variance) {
+            id_split_map.put(nodeId, split);
+          }
         }
       }
       r++;
@@ -329,13 +406,63 @@ public class DecisionTree extends Configured implements Tool {
     file.getParentFile().mkdirs();
     file.createNewFile();
     FileWriter fWriter = new FileWriter(file);
+    boolean continueProcessing = false;
 
     for (int nodeId: id_split_map.keySet()) {
-      if (id_split_map.get(nodeId).variance > 0.08) {
+      if (id_split_map.get(nodeId).variance > 0.05) {
         fWriter.write("" + id_split_map.get(nodeId).toString());
+        continueProcessing = true;
       }
     }
     fWriter.close();
+
+    return continueProcessing;
+  }
+
+  private boolean findBestSplitsJob(String[] args, int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
+
+    final Configuration conf = getConf();
+    final Job job = Job.getInstance(conf, "Best Splits");
+    job.setJarByClass(DecisionTree.class);
+    final Configuration jobConf = job.getConfiguration();
+    jobConf.set("mapreduce.output.textoutputformat.separator", " ");
+    //jobConf.setInt("mapreduce.input.lineinputformat.linespermap", 4400);
+    job.setMapperClass(SplitMapper.class);
+    job.setCombinerClass(SplitCombiner.class);
+    job.setReducerClass(SplitReducer.class);
+    job.setOutputKeyClass(DTKey.class);
+    job.setOutputValueClass(DTValue.class);
+    job.setGroupingComparatorClass(GroupingComparator.class);
+    job.setCombinerKeyGroupingComparatorClass(GroupingComparator.class);
+    //job.setInputFormatClass(FileInputFormat.class);
+    //job.setInputFormatClass(NLineInputFormat.class);
+    //job.setNumReduceTasks(5);
+    //NLineInputFormat.addInputPath(job, new Path(args[1] + "/" + layerCount));
+    FileInputFormat.addInputPath(job, new Path(args[1] + "/" + layerCount));
+    FileOutputFormat.setOutputPath(job, new Path(args[2] + "/" + layerCount));
+
+    job.waitForCompletion(true);
+
+    return decideSplits(args, job.getNumReduceTasks(), layerCount);
+  }
+
+  private void processDataForNextRound_Job(String[] args, int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
+
+    final Configuration conf = getConf();
+    final Job job = Job.getInstance(conf, "Data Processing for Best Splits");
+    job.setJarByClass(DecisionTree.class);
+    final Configuration jobConf = job.getConfiguration();
+    jobConf.set("mapreduce.output.textoutputformat.separator", " ");
+    //jobConf.setInt("mapreduce.input.lineinputformat.linespermap", 4400);
+    job.setMapperClass(processDataMapper.class);
+    job.setOutputKeyClass(Record.class);
+    job.setOutputValueClass(NullWritable.class);
+    //job.setInputFormatClass(FileInputFormat.class);
+    job.setNumReduceTasks(0);
+    job.addCacheFile(new Path(args[3]+"/"+layerCount).toUri());
+    FileInputFormat.addInputPath(job, new Path(args[1] + "/" + layerCount));
+    FileOutputFormat.setOutputPath(job, new Path(args[1] + "/" + (layerCount + 1)));
+    job.waitForCompletion(true);
   }
 
 
@@ -344,39 +471,23 @@ public class DecisionTree extends Configured implements Tool {
 
     preProcessJob(args);
 
-    List<Integer> frontier = new ArrayList<>();
-    frontier.add(1);
     int layerCount = 1;
 
-    while (frontier.size() != 0) {
+    boolean continueProcessing;
 
-      final Configuration conf = getConf();
-      final Job job = Job.getInstance(conf, "Decision Tree");
-      job.setJarByClass(DecisionTree.class);
-      final Configuration jobConf = job.getConfiguration();
-      jobConf.set("mapreduce.output.textoutputformat.separator", " ");
-      jobConf.setInt("mapreduce.input.lineinputformat.linespermap", 4400);
-      job.setMapperClass(SplitMapper.class);
-      job.setCombinerClass(SplitCombiner.class);
-      job.setReducerClass(SplitReducer.class);
-      job.setOutputKeyClass(DTKey.class);
-      job.setOutputValueClass(DTValue.class);
-      job.setGroupingComparatorClass(GroupingComparator.class);
-      job.setCombinerKeyGroupingComparatorClass(GroupingComparator.class);
-      job.setInputFormatClass(NLineInputFormat.class);
-      job.setNumReduceTasks(5);
-      NLineInputFormat.addInputPath(job, new Path(args[1] + "/" + layerCount));
-      FileOutputFormat.setOutputPath(job, new Path(args[2] + "/" + layerCount));
-      job.waitForCompletion(true);
+    do {
 
-      // Creates the split decision file
-      decideSplits(args, job.getNumReduceTasks(), layerCount);
+      continueProcessing = findBestSplitsJob(args, layerCount);
+
+      if (!continueProcessing) {
+        break;
+      }
+
+      processDataForNextRound_Job(args, layerCount);
 
       layerCount++;
 
-      frontier = new ArrayList<>();
-
-    }
+    }while (true);
     return 1;
   }
 

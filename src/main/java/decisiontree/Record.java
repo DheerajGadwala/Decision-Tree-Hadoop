@@ -118,4 +118,12 @@ public class Record implements Writable {
   public int getNodeId() {
     return nodeId.get();
   }
+
+  public void setNodeId(int i) {
+    nodeId.set(i);
+  }
+
+  public void setRating(int i) {
+    rating.set(i);
+  }
 }

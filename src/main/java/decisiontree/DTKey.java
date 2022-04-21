@@ -36,6 +36,14 @@ public class DTKey implements WritableComparable<DTKey> {
     this.featureId = new IntWritable(featureId);
   }
 
+  public DTKey(DTKey key) {
+    this.nodeId = key.nodeId;
+    this.dummy = key.dummy;
+    this.split = key.split;
+    this.splitPoint = key.splitPoint;
+    this.featureId = key.featureId;
+  }
+
   @Override
   public void write(DataOutput dataOutput) throws IOException {
     nodeId.write(dataOutput);
