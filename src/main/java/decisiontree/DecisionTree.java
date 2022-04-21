@@ -1,9 +1,7 @@
 package decisiontree;
 
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.StringTokenizer;
+import java.io.*;
+import java.util.*;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -262,9 +260,82 @@ public class DecisionTree extends Configured implements Tool {
     job.setInputFormatClass(NLineInputFormat.class);
     job.setNumReduceTasks(0);
     NLineInputFormat.addInputPath(job, new Path(args[0]));
-    FileOutputFormat.setOutputPath(job, new Path("node/1"));
+    FileOutputFormat.setOutputPath(job, new Path("layer/1"));
 
     job.waitForCompletion(true);
+  }
+
+  private static class Split {
+    int nodeId;
+    int featureId;
+    double splitPoint;
+    double variance;
+    double mean;
+
+    Split(int nodeId, int featureId, double splitPoint, double variance, double mean) {
+      this.nodeId = nodeId;
+      this.featureId = featureId;
+      this.splitPoint = splitPoint;
+      this.variance = variance;
+      this.mean = mean;
+    }
+
+    @Override
+    public String toString() {
+      return "" + nodeId + " " + featureId + " " + splitPoint + "\n";
+    }
+  }
+
+  public void decideSplits(String[] args, int numberOfReduceTasks, int layerCount) throws IOException {
+
+    Map<Integer, Split> id_split_map = new HashMap<>();
+
+    String fileName = args[2] + "/" + layerCount + "/part-r-";
+
+    int r = 0;
+    while (r < numberOfReduceTasks) {
+
+      StringBuilder is = new StringBuilder(String.valueOf(r));
+
+      while(is.length() != 5) {
+        is.insert(0, "0");
+      }
+
+      // get file
+      File file = new File(fileName + is.toString());
+
+      BufferedReader br = new BufferedReader(new FileReader(file));
+      String line;
+      while ((line = br.readLine()) != null && !line.equals("")) {
+
+        String[] data = line.split(" ");
+        int nodeId = Integer.parseInt(data[0]);
+        int featureId = Integer.parseInt(data[1]);
+        double splitPoint = Double.parseDouble(data[2]);
+        double variance = Double.parseDouble(data[3]);
+        double mean = Double.parseDouble(data[4]);
+        Split split = new Split(nodeId, featureId, splitPoint, variance, mean);
+        if (!id_split_map.containsKey(nodeId)) {
+          id_split_map.put(nodeId, split);
+        }
+        else if (id_split_map.get(nodeId).variance > split.variance) {
+          id_split_map.put(nodeId, split);
+        }
+      }
+      r++;
+    }
+
+    File file = new File(args[3] + "/" + layerCount);
+    file.getParentFile().mkdirs();
+    file.createNewFile();
+    FileWriter fWriter = new FileWriter(file);
+
+    for (int nodeId: id_split_map.keySet()) {
+      if (id_split_map.get(nodeId).variance > 0.08) {
+        fWriter.write("" + id_split_map.get(nodeId).toString());
+      }
+    }
+    fWriter.close();
   }
 
 
@@ -273,33 +344,44 @@ public class DecisionTree extends Configured implements Tool {
 
     preProcessJob(args);
 
-    final Configuration conf = getConf();
-    final Job job = Job.getInstance(conf, "Decision Tree");
-    job.setJarByClass(DecisionTree.class);
-    final Configuration jobConf = job.getConfiguration();
-    jobConf.set("mapreduce.output.textoutputformat.separator", " ");
-    jobConf.setInt("mapreduce.input.lineinputformat.linespermap", 4400);
+    List<Integer> frontier = new ArrayList<>();
+    frontier.add(1);
+    int layerCount = 1;
 
-    job.setMapperClass(SplitMapper.class);
-    job.setCombinerClass(SplitCombiner.class);
-    job.setReducerClass(SplitReducer.class);
-    job.setOutputKeyClass(DTKey.class);
-    job.setOutputValueClass(DTValue.class);
-    job.setGroupingComparatorClass(GroupingComparator.class);
-    job.setCombinerKeyGroupingComparatorClass(GroupingComparator.class);
-    job.setInputFormatClass(NLineInputFormat.class);
-    job.setNumReduceTasks(5);
-    NLineInputFormat.addInputPath(job, new Path("node/1"));
+    while (frontier.size() != 0) {
 
-    FileOutputFormat.setOutputPath(job, new Path(args[1]));
+      final Configuration conf = getConf();
+      final Job job = Job.getInstance(conf, "Decision Tree");
+      job.setJarByClass(DecisionTree.class);
+      final Configuration jobConf = job.getConfiguration();
+      jobConf.set("mapreduce.output.textoutputformat.separator", " ");
+      jobConf.setInt("mapreduce.input.lineinputformat.linespermap", 4400);
+      job.setMapperClass(SplitMapper.class);
+      job.setCombinerClass(SplitCombiner.class);
+      job.setReducerClass(SplitReducer.class);
+      job.setOutputKeyClass(DTKey.class);
+      job.setOutputValueClass(DTValue.class);
+      job.setGroupingComparatorClass(GroupingComparator.class);
+      job.setCombinerKeyGroupingComparatorClass(GroupingComparator.class);
+      job.setInputFormatClass(NLineInputFormat.class);
+      job.setNumReduceTasks(5);
+      NLineInputFormat.addInputPath(job, new Path(args[1] + "/" + layerCount));
+      FileOutputFormat.setOutputPath(job, new Path(args[2] + "/" + layerCount));
+      job.waitForCompletion(true);
 
-    job.waitForCompletion(true);
+      // Creates the split decision file
+      decideSplits(args, job.getNumReduceTasks(), layerCount);
 
+      layerCount++;
+
+      frontier = new ArrayList<>();
+
+    }
     return 1;
   }
 
   public static void main(final String[] args) {
-    if (args.length != 2) {
+    if (args.length != 4) {
       throw new Error("Two arguments required:\n<input-dir> <output-dir>");
     }
     try {
