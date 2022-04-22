@@ -311,7 +311,7 @@ public class DecisionTree extends Configured implements Tool {
   }
 
 
-  public void preProcessJob(final String[] args) throws Exception {
+  public void preProcessJob(String inputFolder) throws Exception {
 
     final Configuration conf = getConf();
     final Job job = Job.getInstance(conf, "Decision Tree");
@@ -326,7 +326,7 @@ public class DecisionTree extends Configured implements Tool {
     //job.setInputFormatClass(NLineInputFormat.class);
     job.setNumReduceTasks(0);
 
-    FileInputFormat.addInputPath(job, new Path(args[0]));
+    FileInputFormat.addInputPath(job, new Path(inputFolder));
     FileOutputFormat.setOutputPath(job, new Path("layer/1"));
 
     job.waitForCompletion(true);
@@ -365,11 +365,11 @@ public class DecisionTree extends Configured implements Tool {
     }
   }
 
-  public boolean decideSplits(String[] args, int numberOfReduceTasks, int layerCount) throws IOException {
+  public boolean decideSplits(String treeLevelFolder, String splitsFolder, double varianceCap, int numberOfReduceTasks, int layerCount) throws IOException {
 
     Map<Integer, Split> id_split_map = new HashMap<>();
 
-    String fileName = args[2] + "/" + layerCount + "/part-r-";
+    String fileName = treeLevelFolder + "/" + layerCount + "/part-r-";
 
     int r = 0;
     while (r < numberOfReduceTasks) {
@@ -402,14 +402,14 @@ public class DecisionTree extends Configured implements Tool {
       r++;
     }
 
-    File file = new File(args[3] + "/" + layerCount);
+    File file = new File(splitsFolder + "/" + layerCount);
     file.getParentFile().mkdirs();
     file.createNewFile();
     FileWriter fWriter = new FileWriter(file);
     boolean continueProcessing = false;
 
     for (int nodeId: id_split_map.keySet()) {
-      if (id_split_map.get(nodeId).variance > 0.05) {
+      if (id_split_map.get(nodeId).variance > varianceCap) {
         fWriter.write("" + id_split_map.get(nodeId).toString());
         continueProcessing = true;
       }
@@ -419,7 +419,7 @@ public class DecisionTree extends Configured implements Tool {
     return continueProcessing;
   }
 
-  private boolean findBestSplitsJob(String[] args, int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
+  private boolean findBestSplitsJob(String levelDataFolder, String treeLevelFolder, String splitsFolder, double varianceCap, int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
 
     final Configuration conf = getConf();
     final Job job = Job.getInstance(conf, "Best Splits");
@@ -438,15 +438,15 @@ public class DecisionTree extends Configured implements Tool {
     //job.setInputFormatClass(NLineInputFormat.class);
     //job.setNumReduceTasks(5);
     //NLineInputFormat.addInputPath(job, new Path(args[1] + "/" + layerCount));
-    FileInputFormat.addInputPath(job, new Path(args[1] + "/" + layerCount));
-    FileOutputFormat.setOutputPath(job, new Path(args[2] + "/" + layerCount));
+    FileInputFormat.addInputPath(job, new Path(levelDataFolder + "/" + layerCount));
+    FileOutputFormat.setOutputPath(job, new Path(treeLevelFolder + "/" + layerCount));
 
     job.waitForCompletion(true);
 
-    return decideSplits(args, job.getNumReduceTasks(), layerCount);
+    return decideSplits(treeLevelFolder, splitsFolder, varianceCap, job.getNumReduceTasks(), layerCount);
   }
 
-  private void processDataForNextRound_Job(String[] args, int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
+  private void processDataForNextRound_Job(String levelDataFolder, String splitsFolder, int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
 
     final Configuration conf = getConf();
     final Job job = Job.getInstance(conf, "Data Processing for Best Splits");
@@ -459,9 +459,9 @@ public class DecisionTree extends Configured implements Tool {
     job.setOutputValueClass(NullWritable.class);
     //job.setInputFormatClass(FileInputFormat.class);
     job.setNumReduceTasks(0);
-    job.addCacheFile(new Path(args[3]+"/"+layerCount).toUri());
-    FileInputFormat.addInputPath(job, new Path(args[1] + "/" + layerCount));
-    FileOutputFormat.setOutputPath(job, new Path(args[1] + "/" + (layerCount + 1)));
+    job.addCacheFile(new Path(splitsFolder+"/"+layerCount).toUri());
+    FileInputFormat.addInputPath(job, new Path(levelDataFolder + "/" + layerCount));
+    FileOutputFormat.setOutputPath(job, new Path(levelDataFolder + "/" + (layerCount + 1)));
     job.waitForCompletion(true);
   }
 
@@ -469,7 +469,12 @@ public class DecisionTree extends Configured implements Tool {
   @Override
   public int run(final String[] args) throws Exception {
 
-    preProcessJob(args);
+    // Read Params
+    String inputFolder = args[0], levelDataFolder = args[1],
+        treeLevelFolder = args[2], splitsFolder = args[3];
+    double varianceCap = Double.parseDouble(args[4]);
+
+    preProcessJob(inputFolder);
 
     int layerCount = 1;
 
@@ -477,13 +482,16 @@ public class DecisionTree extends Configured implements Tool {
 
     do {
 
-      continueProcessing = findBestSplitsJob(args, layerCount);
+      continueProcessing = findBestSplitsJob(
+          levelDataFolder, treeLevelFolder,
+          splitsFolder, varianceCap, layerCount
+      );
 
       if (!continueProcessing) {
         break;
       }
 
-      processDataForNextRound_Job(args, layerCount);
+      processDataForNextRound_Job(levelDataFolder, splitsFolder, layerCount);
 
       layerCount++;
 
