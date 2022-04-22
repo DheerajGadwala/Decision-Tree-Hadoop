@@ -1,7 +1,15 @@
 package decisiontree;
 
-import java.io.*;
-import java.util.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.StringTokenizer;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -21,11 +29,12 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
 public class DecisionTree extends Configured implements Tool {
+
   private static final Logger logger = LogManager.getLogger(DecisionTree.class);
 
   public static class SplitMapper extends Mapper<Object, Text, DTKey, DTValue> {
 
-    double[] splitPoints = new double[] {0.25, 0.5, 0.75};
+    double[] splitPoints = new double[] {0.2, 0.4, 0.6, 0.8};
 
     @Override
     public void map(final Object key, final Text value, final Context context) throws IOException, InterruptedException {
@@ -307,11 +316,10 @@ public class DecisionTree extends Configured implements Tool {
         context.write(r, null);
       }
     }
-
   }
 
 
-  public void preProcessJob(String inputFolder) throws Exception {
+  public void preProcessJob(String inputFolder, String levelData) throws Exception {
 
     final Configuration conf = getConf();
     final Job job = Job.getInstance(conf, "Decision Tree");
@@ -327,7 +335,7 @@ public class DecisionTree extends Configured implements Tool {
     job.setNumReduceTasks(0);
 
     FileInputFormat.addInputPath(job, new Path(inputFolder));
-    FileOutputFormat.setOutputPath(job, new Path("layer/1"));
+    FileOutputFormat.setOutputPath(job, new Path(levelData + "/1"));
 
     job.waitForCompletion(true);
   }
@@ -474,7 +482,7 @@ public class DecisionTree extends Configured implements Tool {
         treeLevelFolder = args[2], splitsFolder = args[3];
     double varianceCap = Double.parseDouble(args[4]);
 
-    preProcessJob(inputFolder);
+    preProcessJob(inputFolder, levelDataFolder);
 
     int layerCount = 1;
 
@@ -500,8 +508,8 @@ public class DecisionTree extends Configured implements Tool {
   }
 
   public static void main(final String[] args) {
-    if (args.length != 4) {
-      throw new Error("Two arguments required:\n<input-dir> <output-dir>");
+    if (args.length != 5) {
+      throw new Error("Five arguments required");
     }
     try {
       ToolRunner.run(new DecisionTree(), args);

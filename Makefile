@@ -17,10 +17,14 @@ aws.emr.release=emr-6.5.0
 aws.region=us-east-1
 aws.bucket.name=drgad24dt
 aws.train=train
+aws.levelData=levelData
+aws.treeLevel=treeLevel
+aws.splits=splits
+aws.varianceCap=0.08
 aws.output=output
 aws.log.dir=logMR
-aws.num.nodes=8
-aws.instance.type=m4.xlarge
+aws.num.nodes=5
+aws.instance.type=m4.large
 
 # -----------------------------------------------------------
 
@@ -110,11 +114,11 @@ upload-app-aws:
 # Main EMR launch.
 aws: jar upload-app-aws delete-output-aws
 	aws emr create-cluster \
-		--name "Decision Tree Best Split 10 machines" \
+		--name "Decision Tree Train 5 machines" \
 		--release-label ${aws.emr.release} \
 		--instance-groups '[{"InstanceCount":${aws.num.nodes},"InstanceGroupType":"CORE","InstanceType":"${aws.instance.type}"},{"InstanceCount":1,"InstanceGroupType":"MASTER","InstanceType":"${aws.instance.type}"}]' \
 	    --applications Name=Hadoop \
-	    --steps '[{"Args":["${job.name}","${aws.k}","${aws.iterations}","${aws.alpha}","s3://${aws.bucket.name}/${aws.train}","s3://${aws.bucket.name}/${aws.output}"],"Type":"CUSTOM_JAR","Jar":"s3://${aws.bucket.name}/${jar.name}","ActionOnFailure":"TERMINATE_CLUSTER","Name":"Custom JAR"}]' \
+	    --steps '[{"Args":["${job.name}","${aws.k}","${aws.iterations}","${aws.alpha}","s3://${aws.bucket.name}/${aws.train}","s3://${aws.bucket.name}/${aws.levelData}","s3://${aws.bucket.name}/${aws.treeLevel}","s3://${aws.bucket.name}/${aws.splits}","${aws.varianceCap}"],"Type":"CUSTOM_JAR","Jar":"s3://${aws.bucket.name}/${jar.name}","ActionOnFailure":"TERMINATE_CLUSTER","Name":"Custom JAR"}]' \
 		--log-uri s3://${aws.bucket.name}/${aws.log.dir} \
 		--use-default-roles \
 		--enable-debugging \
