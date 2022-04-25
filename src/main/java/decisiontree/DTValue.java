@@ -9,8 +9,7 @@ import java.io.IOException;
 import static java.util.Objects.hash;
 
 /**
- * Represents a record in the input.
- * Each record has an id, a rating and features along with their values.
+ *
  */
 public class DTValue implements Writable {
 
