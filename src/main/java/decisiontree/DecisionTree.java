@@ -22,6 +22,8 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -30,43 +32,54 @@ import org.apache.log4j.Logger;
 
 public class DecisionTree extends Configured implements Tool {
 
-  private static final Logger logger = LogManager.getLogger(DecisionTree.class);
+  private static final Logger logger = LogManager.getLogger(DecisionTree.class); // log
 
+  // Job 2 Mapper: Split the data based on each split point for every feature.
+  //              1. read the data and create an object using class Record.
+  //              2. define split points for the features [it is equally spaced values]
+  //              3. for each feature -> split the feature by each split point.
+  //              4. To calculate mean; for each record emit a dummy value for every split point. Order Inversion Technique.
   public static class SplitMapper extends Mapper<Object, Text, DTKey, DTValue> {
 
+    // equal spaced split points to split the data
     double[] splitPoints = new double[] {0.2, 0.4, 0.6, 0.8};
 
     @Override
     public void map(final Object key, final Text value, final Context context) throws IOException, InterruptedException {
 
       final StringTokenizer itr = new StringTokenizer(value.toString(), "\n");
+
       while (itr.hasMoreTokens()) {
+        Record r = new Record(itr.nextToken()); // store the record in an object.
+        int nodeId = r.getNodeId(); // get the node id of the record
 
-        Record r = new Record(itr.nextToken());
-        int nodeId = r.getNodeId();
-
+        // Iterate through all the columns (features) of the record
         for (int featureId = 0; featureId < 700; featureId++) {
+
+          // split every feature at each split point.
+          // e.g. is feature= 0.45 then at splitPoint 0.2 it goes to split 0; split point = 0.4 it goes to split 1.
           for (double splitPoint: splitPoints) {
 
             context.write(
-                new DTKey(nodeId, true, 0, splitPoint, featureId)
-                , new DTValue(0.0, 0)
+                    new DTKey(nodeId, true, 0, splitPoint, featureId)
+                    , new DTValue(0.0, 0)
             ); // In case no records lie in split 0
             context.write(
-                new DTKey(nodeId, true, 1, splitPoint, featureId)
-                , new DTValue(0.0, 0)
+                    new DTKey(nodeId, true, 1, splitPoint, featureId)
+                    , new DTValue(0.0, 0)
             ); // In case no records lie in split 1
             context.write(
-                new DTKey(nodeId, false, 0, splitPoint, featureId)
-                , new DTValue(0.0, 0)
+                    new DTKey(nodeId, false, 0, splitPoint, featureId)
+                    , new DTValue(0.0, 0)
             ); // In case no records lie in split 0
             context.write(
-                new DTKey(nodeId, false, 1, splitPoint, featureId)
-                , new DTValue(0.0, 0)
+                    new DTKey(nodeId, false, 1, splitPoint, featureId)
+                    , new DTValue(0.0, 0)
             ); // In case no records lie in split 1
 
             if (r.getFeature(featureId) < splitPoint) {
 
+              // Order inversion technique is used: dummy nodes are used to calculate the mean before encounter the nodes.
               DTKey dummyEmitKeyForSplit_0 = new DTKey(nodeId, true, 0, splitPoint, featureId);
               DTKey emitKey = new DTKey(nodeId, false, 0, splitPoint, featureId);
               DTValue emitValue = new DTValue(r.getRating().get(), 1);
@@ -76,6 +89,7 @@ public class DecisionTree extends Configured implements Tool {
             }
             else {
 
+              // Order inversion technique is used: dummy nodes are used to calculate the mean before encounter the nodes.
               DTKey dummyEmitKeyForSplit_1 = new DTKey(nodeId, true, 1, splitPoint, featureId);
               DTKey emitKey = new DTKey(nodeId, false, 1, splitPoint, featureId);
               DTValue emitValue = new DTValue(r.getRating().get(), 1);
@@ -89,6 +103,7 @@ public class DecisionTree extends Configured implements Tool {
     }
   }
 
+  // Custom Combiner also uses grouping comparator.
   public static class SplitCombiner extends Reducer<DTKey, DTValue, DTKey, DTValue> {
 
     @Override
@@ -97,14 +112,20 @@ public class DecisionTree extends Configured implements Tool {
       // Possible predictions: {0, 1, 2, 3, 4}
       // Counting occurrences each of ratings
       Map<Double, Integer> mp = new HashMap<>();
+
+      // the required keys are the ratings from 0 to 4.
       for (double i = 0.0; i <= 4; i++) {
-        mp.put(i, 0);
+        mp.put(i, 0); // initialize the map
       }
+
+      // count the number of ratings from the values.
       for (DTValue value: values) {
         mp.put(value.value.get(), mp.get(value.value.get()) + value.count.get());
       }
+
+      // emit the counts in the map.
       for (double i = 0.0; i <= 4; i++) {
-        context.write(key, new DTValue(i, mp.get(i)));
+        context.write(key, new DTValue(i, mp.get(i))); // [node, (rating = i, count of rating = i)]
       }
     }
   }
@@ -119,18 +140,27 @@ public class DecisionTree extends Configured implements Tool {
    */
   public static class SplitReducer extends Reducer<DTKey, DTValue, Text, Text> {
 
-    Map<Integer, Split> smallestVarianceMap = new HashMap<>();
+    // stores the smallest variance for each node in the current level.
+    private Map<Integer, Split> smallestVarianceMap;
+    private double meanOfSplit_1;
+    private double meanOfSplit_2;
+    private int countOfSplit_1;
+    private int countOfSplit_2;
+    private double varianceOfSplit_1;
+    private double varianceOfSplit_2;
+    private boolean mean1_isSet;
+    private boolean mean2_isSet;
+    private boolean variance1_isSet;
+    private boolean variance2_isSet;
 
-    double meanOfSplit_1;
-    double meanOfSplit_2;
-    int countOfSplit_1;
-    int countOfSplit_2;
-    double varianceOfSplit_1;
-    double varianceOfSplit_2;
-    boolean mean1_isSet = false;
-    boolean mean2_isSet = false;
-    boolean variance1_isSet = false;
-    boolean variance2_isSet = false;
+    @Override
+    public void setup(final Reducer.Context context) throws IOException {
+      smallestVarianceMap = new HashMap<>();
+      mean1_isSet = false;
+      mean2_isSet = false;
+      variance1_isSet = false;
+      variance2_isSet = false;
+    }
 
     @Override
     public void reduce(final DTKey key, final Iterable<DTValue> values, final Context context) {
@@ -198,19 +228,12 @@ public class DecisionTree extends Configured implements Tool {
                   + meanOfSplit_2 * countOfSplit_2
           ) / (countOfSplit_1 + countOfSplit_2);
 
-          if (
-              !smallestVarianceMap.containsKey(nodeId)
-                  ||
-              (smallestVarianceMap.containsKey(nodeId)
-                  &&
-              varianceForSplit < smallestVarianceMap.get(nodeId).variance
-              )
-          ) {
-            Split split = new Split(
-                nodeId, key.featureId.get(),
-                key.splitPoint.get(), varianceForSplit, mean,
-                countOfSplit_1 == 0 || countOfSplit_2 == 0
-            );
+          // node with minimum variance
+          if ( !smallestVarianceMap.containsKey(nodeId) || (smallestVarianceMap.containsKey(nodeId)
+                  && varianceForSplit < smallestVarianceMap.get(nodeId).variance )) {
+
+            Split split = new Split(nodeId, key.featureId.get(), key.splitPoint.get(), varianceForSplit, mean,
+                countOfSplit_1 == 0 || countOfSplit_2 == 0); // checks if all the data is on one side of the split.
             smallestVarianceMap.put(nodeId, split);
           }
           mean1_isSet = false;
@@ -232,8 +255,9 @@ public class DecisionTree extends Configured implements Tool {
         Text key = new Text(
             nodeId + " " + bestSplit.featureId + " " + bestSplit.splitPoint
         );
+
         Text value = new Text(
-            bestSplit.variance + " " + bestSplit.nodeId + " " + bestSplit.isPure
+            bestSplit.variance + " " + bestSplit.mean + " " + bestSplit.isSkewed
         );
 
         context.write(key, value);
@@ -245,7 +269,7 @@ public class DecisionTree extends Configured implements Tool {
 
     public GroupingComparator() {
       super(DTKey.class, true);
-    }
+    } // Todo: what is createInstances?
 
     @Override
     public int compare(WritableComparable wc1, WritableComparable wc2) {
@@ -254,7 +278,6 @@ public class DecisionTree extends Configured implements Tool {
       DTKey key2 = (DTKey) wc2;
 
       return key1.compareTo(key2);
-
     }
   }
 
@@ -287,10 +310,10 @@ public class DecisionTree extends Configured implements Tool {
         if (nodesPresent.containsKey(r.getNodeId())) {
           Split split = nodesPresent.get(r.getNodeId());
           if (r.getFeature(split.featureId) < split.splitPoint) {
-            r.setNodeId(2*r.getNodeId());
+            r.setNodeId(2*r.getNodeId()); // left child of a node in the tree
           }
           else {
-            r.setNodeId(2*r.getNodeId()+1);
+            r.setNodeId(2*r.getNodeId() + 1); // right child of a node in the tree
           }
           context.write(r, null);
         }
@@ -299,6 +322,8 @@ public class DecisionTree extends Configured implements Tool {
 
   }
 
+  // Job 1 Mapper : Read all the records and append node id = '1' at the start of each record.
+  // This node id is further edited in the next job.
   public static class preProcessMapper extends Mapper<Object, Text, Record, NullWritable> {
 
     @Override
@@ -306,7 +331,7 @@ public class DecisionTree extends Configured implements Tool {
 
       final StringTokenizer itr = new StringTokenizer(value.toString(), "\n");
       while (itr.hasMoreTokens()) {
-        Record r = new Record("1 "+itr.nextToken());
+        Record r = new Record("1 "+itr.nextToken()); // add node id = "1"
 //        if (r.getRating().get() >= 3) {
 //          r.setRating(1);
 //        }
@@ -318,7 +343,7 @@ public class DecisionTree extends Configured implements Tool {
     }
   }
 
-
+  // Job - 1
   public void preProcessJob(String inputFolder, String levelData) throws Exception {
 
     final Configuration conf = getConf();
@@ -346,15 +371,16 @@ public class DecisionTree extends Configured implements Tool {
     double splitPoint;
     double variance;
     double mean;
-    boolean isPure;
+    boolean isSkewed;
 
-    Split(int nodeId, int featureId, double splitPoint, double variance, double mean, boolean isPure) {
+
+    Split(int nodeId, int featureId, double splitPoint, double variance, double mean, boolean isSkewed) {
       this.nodeId = nodeId;
       this.featureId = featureId;
       this.splitPoint = splitPoint;
       this.variance = variance;
       this.mean = mean;
-      this.isPure = isPure;
+      this.isSkewed = isSkewed;
     }
 
     Split(String line) {
@@ -364,22 +390,24 @@ public class DecisionTree extends Configured implements Tool {
       splitPoint = Double.parseDouble(data[2]);
       variance = Double.parseDouble(data[3]);
       mean = Double.parseDouble(data[4]);
-      isPure = Boolean.parseBoolean(data[5]);
+      isSkewed = Boolean.parseBoolean(data[5]);
     }
 
     @Override
     public String toString() {
-      return "" + nodeId + " " + featureId + " " + splitPoint + " " + variance + " " + mean + " " + isPure + "\n";
+      return "" + nodeId + " " + featureId + " " + splitPoint + " " + variance + " " + mean + " " + isSkewed + "\n";
     }
   }
 
-  public boolean decideSplits(String treeLevelFolder, String splitsFolder, double varianceCap, int numberOfReduceTasks, int layerCount) throws IOException {
+  // Serialized computation.
+  public boolean decideSplits(String treeLevelFolder, String splitsFolder, double varianceCap, int numberOfReduceTasks, int layerCount, String leafNodesFolder) throws IOException {
 
     Map<Integer, Split> id_split_map = new HashMap<>();
 
     String fileName = treeLevelFolder + "/" + layerCount + "/part-r-";
 
     int r = 0;
+    // to iterate through the intermediate output files.
     while (r < numberOfReduceTasks) {
 
       StringBuilder is = new StringBuilder(String.valueOf(r));
@@ -398,7 +426,7 @@ public class DecisionTree extends Configured implements Tool {
         Split split = new Split(line);
         int nodeId = split.nodeId;
 
-        if (!split.isPure) {
+        if (!split.isSkewed) {
           if (!id_split_map.containsKey(nodeId)) {
             id_split_map.put(nodeId, split);
           }
@@ -410,24 +438,32 @@ public class DecisionTree extends Configured implements Tool {
       r++;
     }
 
-    File file = new File(splitsFolder + "/" + layerCount);
-    file.getParentFile().mkdirs();
-    file.createNewFile();
-    FileWriter fWriter = new FileWriter(file);
+    File outFile = new File(splitsFolder + "/" + layerCount);
+    outFile.getParentFile().mkdirs();
+    outFile.createNewFile();
+    FileWriter fWriter = new FileWriter(outFile);
+    File leafNodes = new File(leafNodesFolder + "/" + layerCount);
+    leafNodes.getParentFile().mkdirs();
+    leafNodes.createNewFile();
+    FileWriter fWriterForLeafs = new FileWriter(leafNodes);
     boolean continueProcessing = false;
 
     for (int nodeId: id_split_map.keySet()) {
       if (id_split_map.get(nodeId).variance > varianceCap) {
-        fWriter.write("" + id_split_map.get(nodeId).toString());
+        fWriter.write(id_split_map.get(nodeId).toString());
         continueProcessing = true;
+      }
+      else {
+        fWriterForLeafs.write(id_split_map.get(nodeId).toString());
       }
     }
     fWriter.close();
+    fWriterForLeafs.close();
 
     return continueProcessing;
   }
 
-  private boolean findBestSplitsJob(String levelDataFolder, String treeLevelFolder, String splitsFolder, double varianceCap, int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
+  private boolean findBestSplitsJob(String levelDataFolder, String treeLevelFolder, String splitsFolder, double varianceCap, int layerCount, String leafNodesFolder) throws IOException, ClassNotFoundException, InterruptedException {
 
     final Configuration conf = getConf();
     final Job job = Job.getInstance(conf, "Best Splits");
@@ -451,7 +487,7 @@ public class DecisionTree extends Configured implements Tool {
 
     job.waitForCompletion(true);
 
-    return decideSplits(treeLevelFolder, splitsFolder, varianceCap, job.getNumReduceTasks(), layerCount);
+    return decideSplits(treeLevelFolder, splitsFolder, varianceCap, job.getNumReduceTasks(), layerCount, leafNodesFolder);
   }
 
   private void processDataForNextRound_Job(String levelDataFolder, String splitsFolder, int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
@@ -473,18 +509,71 @@ public class DecisionTree extends Configured implements Tool {
     job.waitForCompletion(true);
   }
 
+//  public static class ReadSplits extends Mapper<Object, Text, Record, NullWritable> {
+//    @Override
+//    public void map(final Object key, final Text value, final Context context)
+//      throws IOException, InterruptedException {
+//
+//    }
+//  }
+
+  private void ReadSplitsBeforeBroadcast(String splitsFolder, int layerCount, String output, double varianceCap, String leafNodesFolder) throws Exception {
+    // Splits folder will havse layer count number of files.
+    // read all those files and put the data into one single file
+
+    // Input files
+    String inFile = splitsFolder + "/";
+    String leafFile = leafNodesFolder + "/";
+
+    // Output files
+    File outFile = new File(output + "/TreeNodes");
+    outFile.getParentFile().mkdirs(); // creates the directory "output"
+    outFile.createNewFile();
+    FileWriter fWriter = new FileWriter(outFile);
+
+    // cache the depth of the tree so that we can create an array of size (2^n) to construct a tree.
+    fWriter.write(layerCount + "\n");
+    int r = 1;
+    // to iterate through the intermediate output files.
+    while (r <= layerCount) {
+
+      // Input file
+      File splitNodes = new File(inFile + r);
+      File leafNodes = new File(leafFile + r);
+
+      BufferedReader brSplit = new BufferedReader(new FileReader(splitNodes));
+      BufferedReader brLeaf = new BufferedReader(new FileReader(leafNodes));
+      String line;
+
+      while ((line = brSplit.readLine()) != null && !line.equals("")) {
+        Split split = new Split(line);
+          fWriter.write("" + split.nodeId + " " + split.featureId + " " + split.splitPoint + "\n");
+      }
+
+      while ((line = brLeaf.readLine()) != null && !line.equals("")) {
+        Split split = new Split(line);
+          fWriter.write("" + split.nodeId + " " + split.featureId + " " + split.splitPoint + " " + split.mean + "\n");
+      }
+      r++;
+    }
+    fWriter.close();
+  }
 
   @Override
   public int run(final String[] args) throws Exception {
 
     // Read Params
     String inputFolder = args[0], levelDataFolder = args[1],
-        treeLevelFolder = args[2], splitsFolder = args[3];
+        treeLevelFolder = args[2], splitsFolder = args[3],
+        broadcastSplits = args[5], leafNodesFolder = args[6];
+
+    // ensure that the variance of the split is > 0.08 to avoid training data that is very similar to each other.
     double varianceCap = Double.parseDouble(args[4]);
 
+    // Job 1 : Read data and append node id = 1 to each record.
     preProcessJob(inputFolder, levelDataFolder);
 
-    int layerCount = 1;
+    int layerCount = 1; // depth of the node or the iteration of the tree.
 
     boolean continueProcessing;
 
@@ -492,7 +581,7 @@ public class DecisionTree extends Configured implements Tool {
 
       continueProcessing = findBestSplitsJob(
           levelDataFolder, treeLevelFolder,
-          splitsFolder, varianceCap, layerCount
+          splitsFolder, varianceCap, layerCount, leafNodesFolder
       );
 
       if (!continueProcessing) {
@@ -504,12 +593,17 @@ public class DecisionTree extends Configured implements Tool {
       layerCount++;
 
     }while (true);
+
+    // Read the split files and put it in single folder.
+    ReadSplitsBeforeBroadcast(splitsFolder, layerCount, broadcastSplits, varianceCap, leafNodesFolder);
+
+
     return 1;
   }
 
   public static void main(final String[] args) {
-    if (args.length != 5) {
-      throw new Error("Five arguments required");
+    if (args.length != 7) {
+      throw new Error("Seven arguments required");
     }
     try {
       ToolRunner.run(new DecisionTree(), args);

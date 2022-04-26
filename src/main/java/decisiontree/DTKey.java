@@ -87,16 +87,16 @@ public class DTKey implements WritableComparable<DTKey> {
     int splitCmp = this.split.compareTo(that.split);
     int splitPointCmp = this.splitPoint.compareTo(that.splitPoint);
     int featureIdCmp = this.featureId.compareTo(that.featureId);
-    int dummyCmp = -this.dummy.compareTo(that.dummy);
+    int dummyCmp = -this.dummy.compareTo(that.dummy); // negative to get dummy = true before dummy = false.
 
     if (nodeIdCmp == 0) {
       if (featureIdCmp == 0) {
         if (splitPointCmp == 0) {
           if (splitCmp == 0) {
-            return dummyCmp;
+            return dummyCmp; // if all the columns of the records is equal them compare by dummy variable.
           }
           else {
-            return splitCmp;
+            return splitCmp; // else use the variable that defines the difference between left split and right split.
           }
         }
         else {
