@@ -22,6 +22,8 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -57,6 +59,24 @@ public class DecisionTree extends Configured implements Tool {
           // split every feature at each split point.
           // e.g. is feature= 0.45 then at splitPoint 0.2 it goes to split 0; split point = 0.4 it goes to split 1.
           for (double splitPoint: splitPoints) {
+
+            context.write(
+                    new DTKey(nodeId, true, 0, splitPoint, featureId)
+                    , new DTValue(0.0, 0)
+            ); // In case no records lie in split 0
+            context.write(
+                    new DTKey(nodeId, true, 1, splitPoint, featureId)
+                    , new DTValue(0.0, 0)
+            ); // In case no records lie in split 1
+            context.write(
+                    new DTKey(nodeId, false, 0, splitPoint, featureId)
+                    , new DTValue(0.0, 0)
+            ); // In case no records lie in split 0
+            context.write(
+                    new DTKey(nodeId, false, 1, splitPoint, featureId)
+                    , new DTValue(0.0, 0)
+            ); // In case no records lie in split 1
+
             if (r.getFeature(featureId) < splitPoint) {
 
               // Order inversion technique is used: dummy nodes are used to calculate the mean before encounter the nodes.
@@ -353,6 +373,7 @@ public class DecisionTree extends Configured implements Tool {
     double mean;
     boolean isSkewed;
 
+
     Split(int nodeId, int featureId, double splitPoint, double variance, double mean, boolean isSkewed) {
       this.nodeId = nodeId;
       this.featureId = featureId;
@@ -379,7 +400,7 @@ public class DecisionTree extends Configured implements Tool {
   }
 
   // Serialized computation.
-  public boolean decideSplits(String treeLevelFolder, String splitsFolder, double varianceCap, int numberOfReduceTasks, int layerCount) throws IOException {
+  public boolean decideSplits(String treeLevelFolder, String splitsFolder, double varianceCap, int numberOfReduceTasks, int layerCount, String leafNodesFolder) throws IOException {
 
     Map<Integer, Split> id_split_map = new HashMap<>();
 
@@ -417,24 +438,32 @@ public class DecisionTree extends Configured implements Tool {
       r++;
     }
 
-    File file = new File(splitsFolder + "/" + layerCount);
-    file.getParentFile().mkdirs();
-    file.createNewFile();
-    FileWriter fWriter = new FileWriter(file);
+    File outFile = new File(splitsFolder + "/" + layerCount);
+    outFile.getParentFile().mkdirs();
+    outFile.createNewFile();
+    FileWriter fWriter = new FileWriter(outFile);
+    File leafNodes = new File(leafNodesFolder + "/" + layerCount);
+    leafNodes.getParentFile().mkdirs();
+    leafNodes.createNewFile();
+    FileWriter fWriterForLeafs = new FileWriter(leafNodes);
     boolean continueProcessing = false;
 
     for (int nodeId: id_split_map.keySet()) {
       if (id_split_map.get(nodeId).variance > varianceCap) {
-        fWriter.write("" + id_split_map.get(nodeId).toString());
+        fWriter.write(id_split_map.get(nodeId).toString());
         continueProcessing = true;
+      }
+      else {
+        fWriterForLeafs.write(id_split_map.get(nodeId).toString());
       }
     }
     fWriter.close();
+    fWriterForLeafs.close();
 
     return continueProcessing;
   }
 
-  private boolean findBestSplitsJob(String levelDataFolder, String treeLevelFolder, String splitsFolder, double varianceCap, int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
+  private boolean findBestSplitsJob(String levelDataFolder, String treeLevelFolder, String splitsFolder, double varianceCap, int layerCount, String leafNodesFolder) throws IOException, ClassNotFoundException, InterruptedException {
 
     final Configuration conf = getConf();
     final Job job = Job.getInstance(conf, "Best Splits");
@@ -458,7 +487,7 @@ public class DecisionTree extends Configured implements Tool {
 
     job.waitForCompletion(true);
 
-    return decideSplits(treeLevelFolder, splitsFolder, varianceCap, job.getNumReduceTasks(), layerCount);
+    return decideSplits(treeLevelFolder, splitsFolder, varianceCap, job.getNumReduceTasks(), layerCount, leafNodesFolder);
   }
 
   private void processDataForNextRound_Job(String levelDataFolder, String splitsFolder, int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
@@ -480,12 +509,63 @@ public class DecisionTree extends Configured implements Tool {
     job.waitForCompletion(true);
   }
 
+//  public static class ReadSplits extends Mapper<Object, Text, Record, NullWritable> {
+//    @Override
+//    public void map(final Object key, final Text value, final Context context)
+//      throws IOException, InterruptedException {
+//
+//    }
+//  }
+
+  private void ReadSplitsBeforeBroadcast(String splitsFolder, int layerCount, String output, double varianceCap, String leafNodesFolder) throws Exception {
+    // Splits folder will havse layer count number of files.
+    // read all those files and put the data into one single file
+
+    // Input files
+    String inFile = splitsFolder + "/";
+    String leafFile = leafNodesFolder + "/";
+
+    // Output files
+    File outFile = new File(output + "/TreeNodes");
+    outFile.getParentFile().mkdirs(); // creates the directory "output"
+    outFile.createNewFile();
+    FileWriter fWriter = new FileWriter(outFile);
+
+    // cache the depth of the tree so that we can create an array of size (2^n) to construct a tree.
+    fWriter.write(layerCount + "\n");
+    int r = 1;
+    // to iterate through the intermediate output files.
+    while (r <= layerCount) {
+
+      // Input file
+      File splitNodes = new File(inFile + r);
+      File leafNodes = new File(leafFile + r);
+
+      BufferedReader brSplit = new BufferedReader(new FileReader(splitNodes));
+      BufferedReader brLeaf = new BufferedReader(new FileReader(leafNodes));
+      String line;
+
+      while ((line = brSplit.readLine()) != null && !line.equals("")) {
+        Split split = new Split(line);
+          fWriter.write("" + split.nodeId + " " + split.featureId + " " + split.splitPoint + "\n");
+      }
+
+      while ((line = brLeaf.readLine()) != null && !line.equals("")) {
+        Split split = new Split(line);
+          fWriter.write("" + split.nodeId + " " + split.featureId + " " + split.splitPoint + " " + split.mean + "\n");
+      }
+      r++;
+    }
+    fWriter.close();
+  }
+
   @Override
   public int run(final String[] args) throws Exception {
 
     // Read Params
     String inputFolder = args[0], levelDataFolder = args[1],
-        treeLevelFolder = args[2], splitsFolder = args[3];
+        treeLevelFolder = args[2], splitsFolder = args[3],
+        broadcastSplits = args[5], leafNodesFolder = args[6];
 
     // ensure that the variance of the split is > 0.08 to avoid training data that is very similar to each other.
     double varianceCap = Double.parseDouble(args[4]);
@@ -501,7 +581,7 @@ public class DecisionTree extends Configured implements Tool {
 
       continueProcessing = findBestSplitsJob(
           levelDataFolder, treeLevelFolder,
-          splitsFolder, varianceCap, layerCount
+          splitsFolder, varianceCap, layerCount, leafNodesFolder
       );
 
       if (!continueProcessing) {
@@ -513,12 +593,17 @@ public class DecisionTree extends Configured implements Tool {
       layerCount++;
 
     }while (true);
+
+    // Read the split files and put it in single folder.
+    ReadSplitsBeforeBroadcast(splitsFolder, layerCount, broadcastSplits, varianceCap, leafNodesFolder);
+
+
     return 1;
   }
 
   public static void main(final String[] args) {
-    if (args.length != 5) {
-      throw new Error("Five arguments required");
+    if (args.length != 7) {
+      throw new Error("Seven arguments required");
     }
     try {
       ToolRunner.run(new DecisionTree(), args);
