@@ -32,6 +32,11 @@ import org.apache.log4j.Logger;
 
 public class DecisionTree extends Configured implements Tool {
 
+  String inputFolder, levelDataFolder, treeLevelFolder,
+      splitsFolder, broadcastSplits, leafNodesFolder;
+
+  double varianceCap;
+
   private static final Logger logger = LogManager.getLogger(DecisionTree.class); // log
 
   // Job 2 Mapper: Split the data based on each split point for every feature.
@@ -344,7 +349,7 @@ public class DecisionTree extends Configured implements Tool {
   }
 
   // Job - 1
-  public void preProcessJob(String inputFolder, String levelData) throws Exception {
+  public void preProcessJob() throws Exception {
 
     final Configuration conf = getConf();
     final Job job = Job.getInstance(conf, "Decision Tree");
@@ -360,7 +365,7 @@ public class DecisionTree extends Configured implements Tool {
     job.setNumReduceTasks(0);
 
     FileInputFormat.addInputPath(job, new Path(inputFolder));
-    FileOutputFormat.setOutputPath(job, new Path(levelData + "/1"));
+    FileOutputFormat.setOutputPath(job, new Path(levelDataFolder + "/1"));
 
     job.waitForCompletion(true);
   }
@@ -400,7 +405,7 @@ public class DecisionTree extends Configured implements Tool {
   }
 
   // Serialized computation.
-  public boolean decideSplits(String treeLevelFolder, String splitsFolder, double varianceCap, int numberOfReduceTasks, int layerCount, String leafNodesFolder) throws IOException {
+  public boolean decideSplits(int numberOfReduceTasks, int layerCount) throws IOException {
 
     Map<Integer, Split> id_split_map = new HashMap<>();
 
@@ -463,7 +468,7 @@ public class DecisionTree extends Configured implements Tool {
     return continueProcessing;
   }
 
-  private boolean findBestSplitsJob(String levelDataFolder, String treeLevelFolder, String splitsFolder, double varianceCap, int layerCount, String leafNodesFolder) throws IOException, ClassNotFoundException, InterruptedException {
+  private boolean findBestSplitsJob(int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
 
     final Configuration conf = getConf();
     final Job job = Job.getInstance(conf, "Best Splits");
@@ -487,10 +492,10 @@ public class DecisionTree extends Configured implements Tool {
 
     job.waitForCompletion(true);
 
-    return decideSplits(treeLevelFolder, splitsFolder, varianceCap, job.getNumReduceTasks(), layerCount, leafNodesFolder);
+    return decideSplits(job.getNumReduceTasks(), layerCount);
   }
 
-  private void processDataForNextRound_Job(String levelDataFolder, String splitsFolder, int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
+  private void processDataForNextRound_Job(int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
 
     final Configuration conf = getConf();
     final Job job = Job.getInstance(conf, "Data Processing for Best Splits");
@@ -509,16 +514,8 @@ public class DecisionTree extends Configured implements Tool {
     job.waitForCompletion(true);
   }
 
-//  public static class ReadSplits extends Mapper<Object, Text, Record, NullWritable> {
-//    @Override
-//    public void map(final Object key, final Text value, final Context context)
-//      throws IOException, InterruptedException {
-//
-//    }
-//  }
-
-  private void ReadSplitsBeforeBroadcast(String splitsFolder, int layerCount, String output, double varianceCap, String leafNodesFolder) throws Exception {
-    // Splits folder will havse layer count number of files.
+  private void ReadSplitsBeforeBroadcast(int layerCount) throws Exception {
+    // Splits folder will have layer count number of files.
     // read all those files and put the data into one single file
 
     // Input files
@@ -526,7 +523,7 @@ public class DecisionTree extends Configured implements Tool {
     String leafFile = leafNodesFolder + "/";
 
     // Output files
-    File outFile = new File(output + "/TreeNodes");
+    File outFile = new File(broadcastSplits+"/data");
     outFile.getParentFile().mkdirs(); // creates the directory "output"
     outFile.createNewFile();
     FileWriter fWriter = new FileWriter(outFile);
@@ -563,15 +560,18 @@ public class DecisionTree extends Configured implements Tool {
   public int run(final String[] args) throws Exception {
 
     // Read Params
-    String inputFolder = args[0], levelDataFolder = args[1],
-        treeLevelFolder = args[2], splitsFolder = args[3],
-        broadcastSplits = args[5], leafNodesFolder = args[6];
+    inputFolder = args[0];
+    levelDataFolder = args[1];
+    treeLevelFolder = args[2];
+    splitsFolder = args[3];
+    broadcastSplits = args[5];
+    leafNodesFolder = args[6];
 
     // ensure that the variance of the split is > 0.08 to avoid training data that is very similar to each other.
-    double varianceCap = Double.parseDouble(args[4]);
+    varianceCap = Double.parseDouble(args[4]);
 
     // Job 1 : Read data and append node id = 1 to each record.
-    preProcessJob(inputFolder, levelDataFolder);
+    preProcessJob();
 
     int layerCount = 1; // depth of the node or the iteration of the tree.
 
@@ -579,23 +579,20 @@ public class DecisionTree extends Configured implements Tool {
 
     do {
 
-      continueProcessing = findBestSplitsJob(
-          levelDataFolder, treeLevelFolder,
-          splitsFolder, varianceCap, layerCount, leafNodesFolder
-      );
+      continueProcessing = findBestSplitsJob(layerCount);
 
       if (!continueProcessing) {
         break;
       }
 
-      processDataForNextRound_Job(levelDataFolder, splitsFolder, layerCount);
+      processDataForNextRound_Job(layerCount);
 
       layerCount++;
 
     }while (true);
 
     // Read the split files and put it in single folder.
-    ReadSplitsBeforeBroadcast(splitsFolder, layerCount, broadcastSplits, varianceCap, leafNodesFolder);
+    ReadSplitsBeforeBroadcast(layerCount);
 
 
     return 1;
