@@ -363,7 +363,6 @@ public class DecisionTree extends Configured implements Tool {
     job.setOutputValueClass(NullWritable.class);
     //job.setInputFormatClass(NLineInputFormat.class);
     job.setNumReduceTasks(0);
-
     FileInputFormat.addInputPath(job, new Path(inputFolder));
     FileOutputFormat.setOutputPath(job, new Path(levelDataFolder + "/1"));
 
@@ -431,13 +430,11 @@ public class DecisionTree extends Configured implements Tool {
         Split split = new Split(line);
         int nodeId = split.nodeId;
 
-        if (!split.isSkewed) {
-          if (!id_split_map.containsKey(nodeId)) {
-            id_split_map.put(nodeId, split);
-          }
-          else if (id_split_map.get(nodeId).variance > split.variance) {
-            id_split_map.put(nodeId, split);
-          }
+        if (!id_split_map.containsKey(nodeId)) {
+          id_split_map.put(nodeId, split);
+        }
+        else if (id_split_map.get(nodeId).variance > split.variance) {
+          id_split_map.put(nodeId, split);
         }
       }
       r++;
@@ -454,7 +451,7 @@ public class DecisionTree extends Configured implements Tool {
     boolean continueProcessing = false;
 
     for (int nodeId: id_split_map.keySet()) {
-      if (id_split_map.get(nodeId).variance > varianceCap) {
+      if (!id_split_map.get(nodeId).isSkewed && id_split_map.get(nodeId).variance > varianceCap) {
         fWriter.write(id_split_map.get(nodeId).toString());
         continueProcessing = true;
       }
@@ -544,7 +541,7 @@ public class DecisionTree extends Configured implements Tool {
 
       while ((line = brSplit.readLine()) != null && !line.equals("")) {
         Split split = new Split(line);
-          fWriter.write("" + split.nodeId + " " + split.featureId + " " + split.splitPoint + "\n");
+          fWriter.write("" + split.nodeId + " " + split.featureId + " " + split.splitPoint + " " + split.mean + "\n");
       }
 
       while ((line = brLeaf.readLine()) != null && !line.equals("")) {
@@ -564,11 +561,10 @@ public class DecisionTree extends Configured implements Tool {
     levelDataFolder = args[1];
     treeLevelFolder = args[2];
     splitsFolder = args[3];
+    varianceCap = Double.parseDouble(args[4]); // ensure that the variance of the split is > 0.08 to avoid training data that is very similar to each other.
     broadcastSplits = args[5];
     leafNodesFolder = args[6];
-
-    // ensure that the variance of the split is > 0.08 to avoid training data that is very similar to each other.
-    varianceCap = Double.parseDouble(args[4]);
+    int maxDepth = Integer.parseInt(args[7]);
 
     // Job 1 : Read data and append node id = 1 to each record.
     preProcessJob();
@@ -578,32 +574,33 @@ public class DecisionTree extends Configured implements Tool {
     boolean continueProcessing;
 
     do {
-
+      // Job 2: find the best features to split by for each node in the given layer of the tree.
+      // Data is stored in splits data folder.
       continueProcessing = findBestSplitsJob(layerCount);
 
       if (!continueProcessing) {
         break;
       }
 
+      // Job 3: Add nodes in each layer to files in layersDataFolder.
       processDataForNextRound_Job(layerCount);
 
       layerCount++;
 
-    }while (true);
+    }while (layerCount <= maxDepth); // limits the depth of the decision tree
 
-    // Read the split files and put it in single folder.
+    // Read the files from splitsFolder and put it in single file.
     ReadSplitsBeforeBroadcast(layerCount);
-
-
-    return 1;
+    return layerCount;
   }
 
   public static void main(final String[] args) {
-    if (args.length != 7) {
-      throw new Error("Seven arguments required");
+    if (args.length != 8) {
+      throw new Error("Eight arguments required");
     }
     try {
-      ToolRunner.run(new DecisionTree(), args);
+//      ToolRunner.run(new DecisionTree(), args);
+      ToolRunner.run(new DecisionTreeTest(), args);
     } catch (final Exception e) {
       logger.error("", e);
     }
