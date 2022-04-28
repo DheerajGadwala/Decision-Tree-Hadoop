@@ -34,7 +34,6 @@ public class Record implements Writable {
   public Record(String input) {
 
     String[] parts = input.split(" ");
-
     nodeId = new IntWritable(Integer.parseInt(parts[0]));
     queryId = new IntWritable(Integer.parseInt(parts[2].substring(4)));
     rating = new IntWritable(Integer.parseInt(parts[1]));
