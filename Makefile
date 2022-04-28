@@ -5,9 +5,16 @@
 hadoop.root=/usr/local/hadoop-2.9.1
 jar.name=mr-demo-1.0.jar# the jar name for your project
 jar.path=target/${jar.name}
-job.name=wc.WordCount
+job.name=decisiontree.DecisionTree
 input.name=edges.csv
 local.input=input
+local.levelData=levelData
+local.treeLevel=treeLevel
+local.splits=splitsFolder
+local.varianceCap=0.08
+local.broadcastSplits=broadcastSplits
+local.leafNodesFolder=leafNodesFolder
+local.maxDepth=15
 local.output=output
 # Pseudo-Cluster Execution
 hdfs.user.name=joe
@@ -37,7 +44,7 @@ clean-local-output:
 # Make sure Hadoop  is set up (in /etc/hadoop files) for standalone operation (not pseudo-cluster).
 # https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/SingleCluster.html#Standalone_Operation
 local: jar clean-local-output
-	${hadoop.root}/bin/hadoop jar ${jar.path} ${job.name} ${local.input} ${local.output}
+	${hadoop.root}/bin/hadoop jar ${jar.path} ${job.name} ${local.input} ${local.levelData} ${local.treeLevel} ${local.splits} ${local.varianceCap} ${local.broadcastSplits} ${local.leafNodesFolder} ${local.maxDepth}
 
 # Start HDFS
 start-hdfs:
