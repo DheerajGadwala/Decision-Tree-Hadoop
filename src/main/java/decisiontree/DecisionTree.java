@@ -402,7 +402,7 @@ public class DecisionTree extends Configured implements Tool {
     job.setOutputValueClass(NullWritable.class);
     //job.setInputFormatClass(NLineInputFormat.class);
     job.setNumReduceTasks(0);
-    FileInputFormat.addInputPath(job, new Path(sampleFolder+"/part-m-00000"));
+    FileInputFormat.addInputPath(job, new Path(sampleFolder));
     FileOutputFormat.setOutputPath(job, new Path(levelDataFolder + "/1"));
 
     job.waitForCompletion(true);
