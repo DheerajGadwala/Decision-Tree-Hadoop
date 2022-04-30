@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 import java.util.StringTokenizer;
 
 import org.apache.hadoop.conf.Configuration;
@@ -33,7 +34,7 @@ import org.apache.log4j.Logger;
 public class DecisionTree extends Configured implements Tool {
 
   String inputFolder, levelDataFolder, treeLevelFolder,
-      splitsFolder, broadcastSplits, leafNodesFolder;
+      splitsFolder, broadcastSplits, leafNodesFolder, sampleFolder;
 
   double varianceCap;
 
@@ -348,8 +349,46 @@ public class DecisionTree extends Configured implements Tool {
     }
   }
 
+  public static class Sampling extends Mapper<Object, Text, NullWritable, Text> {
+
+    private Random randomNumber = new Random();
+    private Double samplingPercentage;
+
+    protected void setup(Context context) throws IOException, InterruptedException {
+      String percentage = context.getConfiguration().get("sampling_percentage");
+      samplingPercentage = Double.parseDouble(percentage) / 100.0;
+    }
+
+    @Override
+    public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+      if (randomNumber.nextDouble() < samplingPercentage) {
+        context.write(NullWritable.get(), value);
+      }
+    }
+
+  }
+
+  public void sampleJob() throws Exception {
+    // Configuration
+    final Configuration conf0 = getConf();
+    final Job job0 = Job.getInstance(conf0, "Decision  Tree");
+    job0.setJarByClass(DecisionTree.class);
+    final Configuration jobConf0 = job0.getConfiguration();
+    jobConf0.set("sampling_percentage","20");
+    FileInputFormat.addInputPath(job0, new Path(inputFolder));
+    FileOutputFormat.setOutputPath(job0, new Path(sampleFolder));
+    job0.setMapperClass(Sampling.class);
+    job0.setOutputKeyClass(NullWritable.class);
+    job0.setOutputValueClass(Text.class);
+    job0.setNumReduceTasks(0);
+    job0.waitForCompletion(true);
+
+  }
+
+
   // Job - 1
   public void preProcessJob() throws Exception {
+
 
     final Configuration conf = getConf();
     final Job job = Job.getInstance(conf, "Decision Tree");
@@ -363,7 +402,7 @@ public class DecisionTree extends Configured implements Tool {
     job.setOutputValueClass(NullWritable.class);
     //job.setInputFormatClass(NLineInputFormat.class);
     job.setNumReduceTasks(0);
-    FileInputFormat.addInputPath(job, new Path(inputFolder));
+    FileInputFormat.addInputPath(job, new Path(sampleFolder));
     FileOutputFormat.setOutputPath(job, new Path(levelDataFolder + "/1"));
 
     job.waitForCompletion(true);
@@ -553,6 +592,8 @@ public class DecisionTree extends Configured implements Tool {
     fWriter.close();
   }
 
+
+
   @Override
   public int run(final String[] args) throws Exception {
 
@@ -565,6 +606,10 @@ public class DecisionTree extends Configured implements Tool {
     broadcastSplits = args[5];
     leafNodesFolder = args[6];
     int maxDepth = Integer.parseInt(args[7]);
+    sampleFolder = args[8];
+
+    //Job 0 : handles sampling
+    sampleJob();
 
     // Job 1 : Read data and append node id = 1 to each record.
     preProcessJob();
@@ -595,12 +640,12 @@ public class DecisionTree extends Configured implements Tool {
   }
 
   public static void main(final String[] args) {
-    if (args.length != 8) {
-      throw new Error("Eight arguments required");
+    if (args.length != 9) {
+      throw new Error("Nine arguments required");
     }
     try {
-//      ToolRunner.run(new DecisionTree(), args);
-      ToolRunner.run(new DecisionTreeTest(), args);
+      ToolRunner.run(new DecisionTree(), args);
+      //ToolRunner.run(new DecisionTreeTest(), args);
     } catch (final Exception e) {
       logger.error("", e);
     }

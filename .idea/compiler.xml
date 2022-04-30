@@ -7,9 +7,11 @@
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <module name="project-mapreduce-ml-map-reduce" />
+        <module name="mr-demo" />
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel>
+      <module name="mr-demo" target="1.8" />
       <module name="project-mapreduce-ml-map-reduce" target="1.8" />
     </bytecodeTargetLevel>
   </component>
