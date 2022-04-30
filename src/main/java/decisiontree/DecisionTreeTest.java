@@ -179,6 +179,24 @@ public class DecisionTreeTest extends Configured implements Tool {
     }
   }
 
+  public static class CustomCombiner extends Reducer<Text, IntWritable, Text, IntWritable> {
+    @Override
+    public void reduce(final Text key, final Iterable<IntWritable> values, final Context context) throws IOException, InterruptedException {
+      int count = 0;
+      if (key.toString().equals("dummy")) {
+        for (IntWritable val : values) {
+          count += val.get();
+        }
+      }
+      else {
+        for (IntWritable val : values) {
+          count += val.get();
+        }
+      }
+      context.write(key, new IntWritable(count));
+    }
+  }
+
   public static class EvaluateAccuracy extends Reducer<Text, IntWritable, NullWritable, NullWritable> {
     double totalPredictions = 0;
 
@@ -233,7 +251,7 @@ public class DecisionTreeTest extends Configured implements Tool {
     job.setGroupingComparatorClass(CustomComp.class);
     job.setPartitionerClass(CustomPartitioner.class);
     job.setReducerClass(EvaluateAccuracy.class);
-//    job.setCombinerClass();
+    job.setCombinerClass(CustomCombiner.class);
 //    job.setOutputKeyClass(Record.class);
 //    job.setOutputValueClass(Text.class);
     job.setNumReduceTasks(1);
@@ -250,7 +268,4 @@ public class DecisionTreeTest extends Configured implements Tool {
     logger.info("*****************************");
     return 1;
   }
-
-
-
 }
