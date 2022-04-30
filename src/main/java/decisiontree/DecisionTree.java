@@ -351,7 +351,7 @@ public class DecisionTree extends Configured implements Tool {
 
   public static class Sampling extends Mapper<Object, Text, NullWritable, Text> {
 
-    private Random randomNumber = new Random();
+    private final Random randomNumber = new Random();
     private Double samplingPercentage;
 
     protected void setup(Context context) throws IOException, InterruptedException {
