@@ -368,20 +368,20 @@ public class DecisionTree extends Configured implements Tool {
 
   }
 
-  public void sampleJob(double sampleSize) throws Exception {
+  public void sampleJob() throws Exception {
     // Configuration
-    final Configuration conf = getConf();
-    final Job job = Job.getInstance(conf, "Decision  Tree");
-    job.setJarByClass(DecisionTree.class);
-    final Configuration jobConf = job.getConfiguration();
-    jobConf.set("sampling_percentage",String.valueOf(sampleSize));
-    FileInputFormat.addInputPath(job, new Path(inputFolder));
-    FileOutputFormat.setOutputPath(job, new Path(sampleFolder));
-    job.setMapperClass(Sampling.class);
-    job.setOutputKeyClass(NullWritable.class);
-    job.setOutputValueClass(Text.class);
-    job.setNumReduceTasks(0);
-    job.waitForCompletion(true);
+    final Configuration conf0 = getConf();
+    final Job job0 = Job.getInstance(conf0, "Decision  Tree");
+    job0.setJarByClass(DecisionTree.class);
+    final Configuration jobConf0 = job0.getConfiguration();
+    jobConf0.set("sampling_percentage","20");
+    FileInputFormat.addInputPath(job0, new Path(inputFolder));
+    FileOutputFormat.setOutputPath(job0, new Path(sampleFolder));
+    job0.setMapperClass(Sampling.class);
+    job0.setOutputKeyClass(NullWritable.class);
+    job0.setOutputValueClass(Text.class);
+    job0.setNumReduceTasks(0);
+    job0.waitForCompletion(true);
 
   }
 
@@ -402,7 +402,7 @@ public class DecisionTree extends Configured implements Tool {
     job.setOutputValueClass(NullWritable.class);
     //job.setInputFormatClass(NLineInputFormat.class);
     job.setNumReduceTasks(0);
-    FileInputFormat.addInputPath(job, new Path(sampleFolder+"/part-m-00000"));
+    FileInputFormat.addInputPath(job, new Path(sampleFolder));
     FileOutputFormat.setOutputPath(job, new Path(levelDataFolder + "/1"));
 
     job.waitForCompletion(true);
@@ -598,20 +598,18 @@ public class DecisionTree extends Configured implements Tool {
   public int run(final String[] args) throws Exception {
 
     // Read Params
-    String basePath = args[0];
-    sampleFolder = basePath + "sample";
-    levelDataFolder = basePath + "levelData";
-    treeLevelFolder = basePath + "treeLevel";
-    splitsFolder = basePath + "splits";
-    broadcastSplits = basePath + "broadcastSplits";
-    leafNodesFolder = basePath + "leafNodes";
-    inputFolder = args[1];
-    varianceCap = Double.parseDouble(args[2]); // ensure that the variance of the split is > 0.08 to avoid training data that is very similar to each other.
-    int maxDepth = Integer.parseInt(args[3]);
-    double sampleSize = Double.parseDouble(args[4]);
+    inputFolder = args[0];
+    levelDataFolder = args[1];
+    treeLevelFolder = args[2];
+    splitsFolder = args[3];
+    varianceCap = Double.parseDouble(args[4]); // ensure that the variance of the split is > 0.08 to avoid training data that is very similar to each other.
+    broadcastSplits = args[5];
+    leafNodesFolder = args[6];
+    int maxDepth = Integer.parseInt(args[7]);
+    sampleFolder = args[8];
 
     //Job 0 : handles sampling
-    sampleJob(sampleSize);
+    sampleJob();
 
     // Job 1 : Read data and append node id = 1 to each record.
     preProcessJob();
@@ -642,15 +640,14 @@ public class DecisionTree extends Configured implements Tool {
   }
 
   public static void main(final String[] args) {
-    if (args.length != 5) {
-      throw new Error("Five arguments required");
+    if (args.length != 9) {
+      throw new Error("Nine arguments required");
     }
     try {
       ToolRunner.run(new DecisionTree(), args);
       //ToolRunner.run(new DecisionTreeTest(), args);
     } catch (final Exception e) {
       logger.error("", e);
-      System.out.println(e.getMessage());
     }
   }
 

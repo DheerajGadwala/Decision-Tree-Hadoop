@@ -2,15 +2,20 @@
 
 # Customize these paths for your environment.
 # -----------------------------------------------------------
-hadoop.root=~/hadoop/hadoop-2.9.1
-jar.name=mr-demo-1.0.jar
+hadoop.root=/Users/shreyasingh/hadoop2.10/hadoop-2.10.1
+jar.name=mr-demo-1.0.jar# the jar name for your project
 jar.path=target/${jar.name}
 job.name=decisiontree.DecisionTree
-local.basePath=./intermediaryData/
-local.input=input/train
+local.input=input
+local.levelData=levelData
+local.treeLevel=treeLevel
+local.splits=splitsFolder
 local.varianceCap=0.08
+local.broadcastSplits=broadcastSplits
+local.leafNodesFolder=leafNodesFolder
 local.maxDepth=15
-local.sampleSize=10
+local.output=output
+local.sample=sample
 # Pseudo-Cluster Execution
 hdfs.user.name=joe
 hdfs.input=input
@@ -18,14 +23,11 @@ hdfs.output=output
 # AWS EMR Execution
 aws.emr.release=emr-5.17.0# previous version 5.17.0 | edit this with current EMR version.
 aws.region=us-east-1
-aws.bucket.name=drgad24dt# edit this with your bucket name (from S3) for the project.
+aws.bucket.name=bucketfortwitterusers# edit this with your bucket name (from S3) for the project.
 aws.subnet.id=subnet-6356553a# no need to edit this
-aws.basePath=s3://drgad24dt/intermediary/
-aws.train=train
-aws.varianceCap=0.08
-aws.maxDepth=15
-aws.sampleSize=20
-aws.log.dir=logMR
+aws.input=input
+aws.output=output
+aws.log.dir=log
 aws.num.nodes=5#5 # 8 is a big cluster might not be available for free tier
 aws.instance.type=m4.large#m4.xlarge
 # -----------------------------------------------------------
@@ -41,8 +43,8 @@ clean-local-output:
 # Runs standalone  --- runs on local system
 # Make sure Hadoop  is set up (in /etc/hadoop files) for standalone operation (not pseudo-cluster).
 # https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/SingleCluster.html#Standalone_Operation
-local: jar
-	${hadoop.root}/bin/hadoop jar ${jar.path} ${job.name} ${local.basePath} ${local.input} ${local.varianceCap} ${local.maxDepth} ${local.sampleSize}
+local: jar clean-local-output
+	${hadoop.root}/bin/hadoop jar ${jar.path} ${job.name} ${local.input} ${local.levelData} ${local.treeLevel} ${local.splits} ${local.varianceCap} ${local.broadcastSplits} ${local.leafNodesFolder} ${local.maxDepth} ${local.sample}
 
 # Start HDFS
 start-hdfs:
@@ -103,7 +105,7 @@ make-bucket:
 
 # Upload data to S3 input dir.
 upload-input-aws: make-bucket
-	aws s3 sync ${local.input} s3://${aws.bucket.name}/${aws.train}
+	aws s3 sync ${local.input} s3://${aws.bucket.name}/${aws.input}
 
 # Delete S3 output dir.
 delete-output-aws:
@@ -114,13 +116,13 @@ upload-app-aws:
 	aws s3 cp ${jar.path} s3://${aws.bucket.name}
 
 # Main EMR launch.
-aws: jar upload-app-aws
+aws: jar upload-app-aws delete-output-aws
 	aws emr create-cluster \
-		--name "Decision Tree Train 5 machines 20% SS" \
+		--name "TwitterCount MR Cluster" \
 		--release-label ${aws.emr.release} \
 		--instance-groups '[{"InstanceCount":${aws.num.nodes},"InstanceGroupType":"CORE","InstanceType":"${aws.instance.type}"},{"InstanceCount":1,"InstanceGroupType":"MASTER","InstanceType":"${aws.instance.type}"}]' \
 	    --applications Name=Hadoop \
-	    --steps '[{"Args":["${job.name}","${aws.basePath}","s3://${aws.bucket.name}/${aws.train}","${aws.varianceCap}","${aws.maxDepth}","${aws.sampleSize}"],"Type":"CUSTOM_JAR","Jar":"s3://${aws.bucket.name}/${jar.name}","ActionOnFailure":"TERMINATE_CLUSTER","Name":"Custom JAR"}]' \
+	    --steps '[{"Args":["${job.name}","s3://${aws.bucket.name}/${aws.input}","s3://${aws.bucket.name}/${aws.output}"],"Type":"CUSTOM_JAR","Jar":"s3://${aws.bucket.name}/${jar.name}","ActionOnFailure":"TERMINATE_CLUSTER","Name":"Custom JAR"}]' \
 		--log-uri s3://${aws.bucket.name}/${aws.log.dir} \
 		--use-default-roles \
 		--enable-debugging \
