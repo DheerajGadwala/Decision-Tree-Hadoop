@@ -60,27 +60,27 @@ public class DecisionTree extends Configured implements Tool {
         int nodeId = r.getNodeId(); // get the node id of the record
 
         // Iterate through all the columns (features) of the record
-        for (int featureId = 0; featureId < 23; featureId++) {
+        for (int featureId = 0; featureId < 700; featureId++) {
 
           // split every feature at each split point.
           // e.g. is feature= 0.45 then at splitPoint 0.2 it goes to split 0; split point = 0.4 it goes to split 1.
           for (double splitPoint: splitPoints) {
 
             context.write(
-                    new DTKey(nodeId, true, 0, splitPoint, featureId)
-                    , new DTValue(0.0, 0)
+                new DTKey(nodeId, true, 0, splitPoint, featureId)
+                , new DTValue(0.0, 0)
             ); // In case no records lie in split 0
             context.write(
-                    new DTKey(nodeId, true, 1, splitPoint, featureId)
-                    , new DTValue(0.0, 0)
+                new DTKey(nodeId, true, 1, splitPoint, featureId)
+                , new DTValue(0.0, 0)
             ); // In case no records lie in split 1
             context.write(
-                    new DTKey(nodeId, false, 0, splitPoint, featureId)
-                    , new DTValue(0.0, 0)
+                new DTKey(nodeId, false, 0, splitPoint, featureId)
+                , new DTValue(0.0, 0)
             ); // In case no records lie in split 0
             context.write(
-                    new DTKey(nodeId, false, 1, splitPoint, featureId)
-                    , new DTValue(0.0, 0)
+                new DTKey(nodeId, false, 1, splitPoint, featureId)
+                , new DTValue(0.0, 0)
             ); // In case no records lie in split 1
 
             if (r.getFeature(featureId) < splitPoint) {
@@ -236,7 +236,7 @@ public class DecisionTree extends Configured implements Tool {
 
           // node with minimum variance
           if ( !smallestVarianceMap.containsKey(nodeId) || (smallestVarianceMap.containsKey(nodeId)
-                  && varianceForSplit < smallestVarianceMap.get(nodeId).variance )) {
+              && varianceForSplit < smallestVarianceMap.get(nodeId).variance )) {
 
             Split split = new Split(nodeId, key.featureId.get(), key.splitPoint.get(), varianceForSplit, mean,
                 countOfSplit_1 == 0 || countOfSplit_2 == 0); // checks if all the data is on one side of the split.
@@ -368,20 +368,20 @@ public class DecisionTree extends Configured implements Tool {
 
   }
 
-  public void sampleJob() throws Exception {
+  public void sampleJob(double sampleSize) throws Exception {
     // Configuration
-    final Configuration conf0 = getConf();
-    final Job job0 = Job.getInstance(conf0, "Decision  Tree");
-    job0.setJarByClass(DecisionTree.class);
-    final Configuration jobConf0 = job0.getConfiguration();
-    jobConf0.set("sampling_percentage","20");
-    FileInputFormat.addInputPath(job0, new Path(inputFolder));
-    FileOutputFormat.setOutputPath(job0, new Path(sampleFolder));
-    job0.setMapperClass(Sampling.class);
-    job0.setOutputKeyClass(NullWritable.class);
-    job0.setOutputValueClass(Text.class);
-    job0.setNumReduceTasks(0);
-    job0.waitForCompletion(true);
+    final Configuration conf = getConf();
+    final Job job = Job.getInstance(conf, "Decision  Tree");
+    job.setJarByClass(DecisionTree.class);
+    final Configuration jobConf = job.getConfiguration();
+    jobConf.set("sampling_percentage",String.valueOf(sampleSize));
+    FileInputFormat.addInputPath(job, new Path(inputFolder));
+    FileOutputFormat.setOutputPath(job, new Path(sampleFolder));
+    job.setMapperClass(Sampling.class);
+    job.setOutputKeyClass(NullWritable.class);
+    job.setOutputValueClass(Text.class);
+    job.setNumReduceTasks(0);
+    job.waitForCompletion(true);
 
   }
 
@@ -402,7 +402,7 @@ public class DecisionTree extends Configured implements Tool {
     job.setOutputValueClass(NullWritable.class);
     //job.setInputFormatClass(NLineInputFormat.class);
     job.setNumReduceTasks(0);
-    FileInputFormat.addInputPath(job, new Path(sampleFolder+"/part-m-00000"));
+    FileInputFormat.addInputPath(job, new Path(sampleFolder));
     FileOutputFormat.setOutputPath(job, new Path(levelDataFolder + "/1"));
 
     job.waitForCompletion(true);
@@ -580,12 +580,12 @@ public class DecisionTree extends Configured implements Tool {
 
       while ((line = brSplit.readLine()) != null && !line.equals("")) {
         Split split = new Split(line);
-          fWriter.write("" + split.nodeId + " " + split.featureId + " " + split.splitPoint + " " + split.mean + "\n");
+        fWriter.write("" + split.nodeId + " " + split.featureId + " " + split.splitPoint + " " + split.mean + "\n");
       }
 
       while ((line = brLeaf.readLine()) != null && !line.equals("")) {
         Split split = new Split(line);
-          fWriter.write("" + split.nodeId + " " + split.featureId + " " + split.splitPoint + " " + split.mean + "\n");
+        fWriter.write("" + split.nodeId + " " + split.featureId + " " + split.splitPoint + " " + split.mean + "\n");
       }
       r++;
     }
@@ -598,18 +598,20 @@ public class DecisionTree extends Configured implements Tool {
   public int run(final String[] args) throws Exception {
 
     // Read Params
-    inputFolder = args[0];
-    levelDataFolder = args[1];
-    treeLevelFolder = args[2];
-    splitsFolder = args[3];
-    varianceCap = Double.parseDouble(args[4]); // ensure that the variance of the split is > 0.08 to avoid training data that is very similar to each other.
-    broadcastSplits = args[5];
-    leafNodesFolder = args[6];
-    int maxDepth = Integer.parseInt(args[7]);
-    sampleFolder = args[8];
+    String basePath = args[0];
+    sampleFolder = basePath + "sample";
+    levelDataFolder = basePath + "levelData";
+    treeLevelFolder = basePath + "treeLevel";
+    splitsFolder = basePath + "splits";
+    broadcastSplits = basePath + "broadcastSplits";
+    leafNodesFolder = basePath + "leafNodes";
+    inputFolder = args[1];
+    varianceCap = Double.parseDouble(args[2]); // ensure that the variance of the split is > 0.08 to avoid training data that is very similar to each other.
+    int maxDepth = Integer.parseInt(args[3]);
+    double sampleSize = Double.parseDouble(args[4]);
 
     //Job 0 : handles sampling
-    sampleJob();
+    sampleJob(sampleSize);
 
     // Job 1 : Read data and append node id = 1 to each record.
     preProcessJob();
@@ -640,14 +642,15 @@ public class DecisionTree extends Configured implements Tool {
   }
 
   public static void main(final String[] args) {
-    if (args.length != 9) {
-      throw new Error("Nine arguments required");
+    if (args.length != 5) {
+      throw new Error("Five arguments required");
     }
     try {
       ToolRunner.run(new DecisionTree(), args);
       //ToolRunner.run(new DecisionTreeTest(), args);
     } catch (final Exception e) {
       logger.error("", e);
+      System.out.println(e.getMessage());
     }
   }
 
