@@ -23,8 +23,6 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -33,10 +31,12 @@ import org.apache.log4j.Logger;
 
 public class DecisionTree extends Configured implements Tool {
 
-  String inputFolder, levelDataFolder, treeLevelFolder,
-      splitsFolder, broadcastSplits, leafNodesFolder, sampleFolder;
+  String trainInput, levelData, treeLevel, splits,
+      broadcastSplits, leafNodes, trainSample;
 
-  double varianceCap;
+  int maxDepth;
+
+  double varianceCap, sampleSize;
 
   private static final Logger logger = LogManager.getLogger(DecisionTree.class); // log
 
@@ -368,20 +368,19 @@ public class DecisionTree extends Configured implements Tool {
 
   }
 
-  public void sampleJob() throws Exception {
+  public static void sampleJob(Configuration conf, String inputFile, String outputFile, double sampleSize) throws Exception {
     // Configuration
-    final Configuration conf0 = getConf();
-    final Job job0 = Job.getInstance(conf0, "Decision  Tree");
-    job0.setJarByClass(DecisionTree.class);
-    final Configuration jobConf0 = job0.getConfiguration();
-    jobConf0.set("sampling_percentage","20");
-    FileInputFormat.addInputPath(job0, new Path(inputFolder));
-    FileOutputFormat.setOutputPath(job0, new Path(sampleFolder));
-    job0.setMapperClass(Sampling.class);
-    job0.setOutputKeyClass(NullWritable.class);
-    job0.setOutputValueClass(Text.class);
-    job0.setNumReduceTasks(0);
-    job0.waitForCompletion(true);
+    final Job job = Job.getInstance(conf, "Decision  Tree");
+    job.setJarByClass(DecisionTree.class);
+    final Configuration jobConf = job.getConfiguration();
+    jobConf.set("sampling_percentage",String.valueOf(sampleSize));
+    FileInputFormat.addInputPath(job, new Path(inputFile));
+    FileOutputFormat.setOutputPath(job, new Path(outputFile));
+    job.setMapperClass(Sampling.class);
+    job.setOutputKeyClass(NullWritable.class);
+    job.setOutputValueClass(Text.class);
+    job.setNumReduceTasks(0);
+    job.waitForCompletion(true);
 
   }
 
@@ -402,8 +401,8 @@ public class DecisionTree extends Configured implements Tool {
     job.setOutputValueClass(NullWritable.class);
     //job.setInputFormatClass(NLineInputFormat.class);
     job.setNumReduceTasks(0);
-    FileInputFormat.addInputPath(job, new Path(sampleFolder));
-    FileOutputFormat.setOutputPath(job, new Path(levelDataFolder + "/1"));
+    FileInputFormat.addInputPath(job, new Path(trainSample));
+    FileOutputFormat.setOutputPath(job, new Path(levelData + "/1"));
 
     job.waitForCompletion(true);
   }
@@ -447,7 +446,7 @@ public class DecisionTree extends Configured implements Tool {
 
     Map<Integer, Split> id_split_map = new HashMap<>();
 
-    String fileName = treeLevelFolder + "/" + layerCount + "/part-r-";
+    String fileName = treeLevel + "/" + layerCount + "/part-r-";
 
     int r = 0;
     // to iterate through the intermediate output files.
@@ -479,11 +478,11 @@ public class DecisionTree extends Configured implements Tool {
       r++;
     }
 
-    File outFile = new File(splitsFolder + "/" + layerCount);
+    File outFile = new File(splits + "/" + layerCount);
     outFile.getParentFile().mkdirs();
     outFile.createNewFile();
     FileWriter fWriter = new FileWriter(outFile);
-    File leafNodes = new File(leafNodesFolder + "/" + layerCount);
+    File leafNodes = new File(this.leafNodes + "/" + layerCount);
     leafNodes.getParentFile().mkdirs();
     leafNodes.createNewFile();
     FileWriter fWriterForLeafs = new FileWriter(leafNodes);
@@ -523,8 +522,8 @@ public class DecisionTree extends Configured implements Tool {
     //job.setInputFormatClass(NLineInputFormat.class);
     //job.setNumReduceTasks(5);
     //NLineInputFormat.addInputPath(job, new Path(args[1] + "/" + layerCount));
-    FileInputFormat.addInputPath(job, new Path(levelDataFolder + "/" + layerCount));
-    FileOutputFormat.setOutputPath(job, new Path(treeLevelFolder + "/" + layerCount));
+    FileInputFormat.addInputPath(job, new Path(levelData + "/" + layerCount));
+    FileOutputFormat.setOutputPath(job, new Path(treeLevel + "/" + layerCount));
 
     job.waitForCompletion(true);
 
@@ -544,9 +543,9 @@ public class DecisionTree extends Configured implements Tool {
     job.setOutputValueClass(NullWritable.class);
     //job.setInputFormatClass(FileInputFormat.class);
     job.setNumReduceTasks(0);
-    job.addCacheFile(new Path(splitsFolder+"/"+layerCount).toUri());
-    FileInputFormat.addInputPath(job, new Path(levelDataFolder + "/" + layerCount));
-    FileOutputFormat.setOutputPath(job, new Path(levelDataFolder + "/" + (layerCount + 1)));
+    job.addCacheFile(new Path(splits +"/"+layerCount).toUri());
+    FileInputFormat.addInputPath(job, new Path(levelData + "/" + layerCount));
+    FileOutputFormat.setOutputPath(job, new Path(levelData + "/" + (layerCount + 1)));
     job.waitForCompletion(true);
   }
 
@@ -555,8 +554,8 @@ public class DecisionTree extends Configured implements Tool {
     // read all those files and put the data into one single file
 
     // Input files
-    String inFile = splitsFolder + "/";
-    String leafFile = leafNodesFolder + "/";
+    String inFile = splits + "/";
+    String leafFile = leafNodes + "/";
 
     // Output files
     File outFile = new File(broadcastSplits+"/data");
@@ -598,18 +597,19 @@ public class DecisionTree extends Configured implements Tool {
   public int run(final String[] args) throws Exception {
 
     // Read Params
-    inputFolder = args[0];
-    levelDataFolder = args[1];
-    treeLevelFolder = args[2];
-    splitsFolder = args[3];
-    varianceCap = Double.parseDouble(args[4]); // ensure that the variance of the split is > 0.08 to avoid training data that is very similar to each other.
-    broadcastSplits = args[5];
-    leafNodesFolder = args[6];
-    int maxDepth = Integer.parseInt(args[7]);
-    sampleFolder = args[8];
+    trainInput = args[0];
+    trainSample = args[2];
+    levelData = args[4];
+    treeLevel = args[5];
+    splits = args[6];
+    broadcastSplits = args[7];
+    leafNodes = args[8];
+    varianceCap = Double.parseDouble(args[9]); // ensure that the variance of the split is > 0.08 to avoid training data that is very similar to each other.
+    maxDepth = Integer.parseInt(args[10]);
+    sampleSize = Double.parseDouble(args[11]);
 
     //Job 0 : handles sampling
-    sampleJob();
+    sampleJob(getConf(), trainInput, trainSample, sampleSize);
 
     // Job 1 : Read data and append node id = 1 to each record.
     preProcessJob();

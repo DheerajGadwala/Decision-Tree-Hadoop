@@ -21,11 +21,10 @@ import java.util.*;
 public class DecisionTreeTest extends Configured implements Tool {
   private static Node[] tree; // Trained decision tree [broadcast]
 
+  String testInput, testSample, broadcastSplits;
 
-  String inputFolder, levelDataFolder, treeLevelFolder,
-      splitsFolder, broadcastSplits, leafNodesFolder;
+  double sampleSize;
 
-  double varianceCap;
   enum Counter {
     Record_Count
   }
@@ -225,14 +224,11 @@ public class DecisionTreeTest extends Configured implements Tool {
   @Override
   public int run(final String[] args) throws Exception {
 
-    // Read Params
-    inputFolder = args[0];
-    levelDataFolder = args[1];
-    treeLevelFolder = args[2];
-    splitsFolder = args[3];
-    varianceCap = Double.parseDouble(args[4]); // ensure that the variance of the split is > 0.08 to avoid training data that is very similar to each other.
-    broadcastSplits = args[5];
-    leafNodesFolder = args[6];
+    // Params
+    testInput = args[1];
+    testSample = args[3];
+    broadcastSplits = args[7];
+    sampleSize = Double.parseDouble(args[11]);
 
     // Configuration
     final Configuration conf = super.getConf();
@@ -256,7 +252,7 @@ public class DecisionTreeTest extends Configured implements Tool {
 //    job.setOutputValueClass(Text.class);
     job.setNumReduceTasks(1);
 
-    MultipleInputs.addInputPath(job, new Path(inputFolder), TextInputFormat.class,
+    MultipleInputs.addInputPath(job, new Path(testInput), TextInputFormat.class,
         DecisionTreeTest.ReadSplits.class);
     FileOutputFormat.setOutputPath(job, new Path("output"));
     job.addCacheFile(new Path(broadcastSplits + "/data").toUri());

@@ -2,20 +2,22 @@
 
 # Customize these paths for your environment.
 # -----------------------------------------------------------
-hadoop.root=/Users/shreyasingh/hadoop2.10/hadoop-2.10.1
+hadoop.root=~/hadoop/hadoop-2.9.1
 jar.name=mr-demo-1.0.jar# the jar name for your project
 jar.path=target/${jar.name}
 job.name=decisiontree.DecisionTree
-local.input=input
-local.levelData=levelData
-local.treeLevel=treeLevel
-local.splits=splitsFolder
+local.trainInput=input/train
+local.testInput=input/test
+local.trainSample=intermediary/trainSample
+local.testSample=intermediary/testSample
+local.levelData=intermediary/levelData
+local.treeLevel=intermediary/treeLevel
+local.splits=intermediary/splits
+local.broadcastSplits=intermediary/broadcastSplits
+local.leafNodes=intermediary/leafNodes
 local.varianceCap=0.08
-local.broadcastSplits=broadcastSplits
-local.leafNodesFolder=leafNodesFolder
 local.maxDepth=15
-local.output=output
-local.sample=sample
+local.sampleSize=1
 # Pseudo-Cluster Execution
 hdfs.user.name=joe
 hdfs.input=input
@@ -25,9 +27,20 @@ aws.emr.release=emr-5.17.0# previous version 5.17.0 | edit this with current EMR
 aws.region=us-east-1
 aws.bucket.name=bucketfortwitterusers# edit this with your bucket name (from S3) for the project.
 aws.subnet.id=subnet-6356553a# no need to edit this
-aws.input=input
-aws.output=output
-aws.log.dir=log
+aws.trainInput=input/train
+aws.testInput=input/test
+aws.trainSample=intermediary/trainSample
+aws.testSample=intermediary/testSample
+aws.levelData=intermediary/levelData
+aws.treeLevel=intermediary/treeLevel
+aws.splits=intermediary/splits
+aws.broadcastSplits=intermediary/broadcastSplits
+aws.leafNodes=intermediary/leafNodes
+aws.varianceCap=0.08
+aws.maxDepth=15
+aws.sampleSize=1
+aws.sample=sample
+aws.log.dir=logMR
 aws.num.nodes=5#5 # 8 is a big cluster might not be available for free tier
 aws.instance.type=m4.large#m4.xlarge
 # -----------------------------------------------------------
@@ -43,8 +56,8 @@ clean-local-output:
 # Runs standalone  --- runs on local system
 # Make sure Hadoop  is set up (in /etc/hadoop files) for standalone operation (not pseudo-cluster).
 # https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/SingleCluster.html#Standalone_Operation
-local: jar clean-local-output
-	${hadoop.root}/bin/hadoop jar ${jar.path} ${job.name} ${local.input} ${local.levelData} ${local.treeLevel} ${local.splits} ${local.varianceCap} ${local.broadcastSplits} ${local.leafNodesFolder} ${local.maxDepth} ${local.sample}
+local: jar
+	${hadoop.root}/bin/hadoop jar ${jar.path} ${job.name} ${local.trainInput} ${local.testInput} ${local.trainSample} ${local.testSample} ${local.levelData} ${local.treeLevel} ${local.splits} ${local.broadcastSplits} ${local.leafNodes} ${local.varianceCap} ${local.maxDepth} ${local.sampleSize}
 
 # Start HDFS
 start-hdfs:
