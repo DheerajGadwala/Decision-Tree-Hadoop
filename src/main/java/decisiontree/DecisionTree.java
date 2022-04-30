@@ -60,7 +60,7 @@ public class DecisionTree extends Configured implements Tool {
         int nodeId = r.getNodeId(); // get the node id of the record
 
         // Iterate through all the columns (features) of the record
-        for (int featureId = 0; featureId < 700; featureId++) {
+        for (int featureId = 0; featureId < 23; featureId++) {
 
           // split every feature at each split point.
           // e.g. is feature= 0.45 then at splitPoint 0.2 it goes to split 0; split point = 0.4 it goes to split 1.
