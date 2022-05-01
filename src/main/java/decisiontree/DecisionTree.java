@@ -15,10 +15,7 @@ import java.util.StringTokenizer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.WritableComparable;
-import org.apache.hadoop.io.WritableComparator;
+import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
@@ -32,6 +29,10 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
 public class DecisionTree extends Configured implements Tool {
+
+  enum Counters {
+    NodeCount
+  }
 
   String trainInput, levelData, treeLevel, splits,
       broadcastSplits, leafNodes, trainSample;
@@ -303,9 +304,13 @@ public class DecisionTree extends Configured implements Tool {
         BufferedReader br = new BufferedReader(new InputStreamReader(fis));
         String line;
         while ((line = br.readLine()) != null && !line.equals("")) {
+          System.out.println(line);
+
           Split split = new Split(line);
           int nodeId = split.nodeId;
-          nodesPresent.put(nodeId, split);
+          if (!split.isLeaf) {
+            nodesPresent.put(nodeId, split);
+          }
         }
       }
     }
@@ -415,6 +420,7 @@ public class DecisionTree extends Configured implements Tool {
     double variance;
     double mean;
     boolean isSkewed;
+    boolean isLeaf;
 
     public Split(int nodeId, int featureId, double splitPoint, double variance, double mean, boolean isSkewed) {
       this.nodeId = nodeId;
@@ -423,6 +429,7 @@ public class DecisionTree extends Configured implements Tool {
       this.variance = variance;
       this.mean = mean;
       this.isSkewed = isSkewed;
+      this.isLeaf = false;
     }
 
     public Split(String line) {
@@ -433,6 +440,14 @@ public class DecisionTree extends Configured implements Tool {
       variance = Double.parseDouble(data[3]);
       mean = Double.parseDouble(data[4]);
       isSkewed = Boolean.parseBoolean(data[5]);
+      if (data.length == 7) {
+        if (data[6].equals("true")) {
+          isLeaf = true;
+        }
+        else {
+          isLeaf = false;
+        }
+      }
     }
 
     public int getNodeId() {
@@ -453,7 +468,21 @@ public class DecisionTree extends Configured implements Tool {
 
     @Override
     public String toString() {
-      return "" + nodeId + " " + featureId + " " + splitPoint + " " + variance + " " + mean + " " + isSkewed + "\n";
+      return "" + nodeId + " " + featureId + " " + splitPoint + " " + variance + " " + mean + " " + isSkewed + " " + isLeaf;
+    }
+  }
+
+
+  public static class DecideSplitMapper extends Mapper<Object, Text, IntWritable, Text> {
+    @Override
+    public void map(final Object key, final Text value, final Context context) throws IOException, InterruptedException {
+
+      final StringTokenizer itr = new StringTokenizer(value.toString(), "\n");
+
+      while (itr.hasMoreTokens()) {
+        Split s = new Split(itr.nextToken());
+        context.write(new IntWritable(s.nodeId), new Text(s.toString()));
+      }
     }
   }
 
@@ -467,20 +496,17 @@ public class DecisionTree extends Configured implements Tool {
     // to iterate through the intermediate output files.
     while (r < numberOfReduceTasks) {
 
-      StringBuilder is = new StringBuilder(String.valueOf(r));
 
-      while(is.length() != 5) {
-        is.insert(0, "0");
-      }
+  public static class DecideSplitReducer extends Reducer<IntWritable, Text, NullWritable, Text> {
 
-      // get file
-      File file = new File(fileName + is.toString());
+    Map<Integer, Split> id_split_map = new HashMap<>();
 
-      BufferedReader br = new BufferedReader(new FileReader(file));
-      String line;
-      while ((line = br.readLine()) != null && !line.equals("")) {
+    @Override
+    public void reduce(final IntWritable key, final Iterable<Text> values, final Context context) {
 
-        Split split = new Split(line);
+      for (Text splitText: values) {
+        Split split = new Split(splitText.toString());
+
         int nodeId = split.nodeId;
 
         if (!id_split_map.containsKey(nodeId)) {
@@ -490,32 +516,106 @@ public class DecisionTree extends Configured implements Tool {
           id_split_map.put(nodeId, split);
         }
       }
-      r++;
     }
 
-    File outFile = new File(splits + "/" + layerCount);
-    outFile.getParentFile().mkdirs();
-    outFile.createNewFile();
-    FileWriter fWriter = new FileWriter(outFile);
-    File leafNodes = new File(this.leafNodes + "/" + layerCount);
-    leafNodes.getParentFile().mkdirs();
-    leafNodes.createNewFile();
-    FileWriter fWriterForLeafs = new FileWriter(leafNodes);
-    boolean continueProcessing = false;
+    @Override
+    public void cleanup(Context context) throws IOException, InterruptedException {
 
-    for (int nodeId: id_split_map.keySet()) {
-      if (!id_split_map.get(nodeId).isSkewed && id_split_map.get(nodeId).variance > varianceCap) {
-        fWriter.write(id_split_map.get(nodeId).toString());
-        continueProcessing = true;
-      }
-      else {
-        fWriterForLeafs.write(id_split_map.get(nodeId).toString());
+      double varianceCap = Double.parseDouble(context.getConfiguration().get("varianceCap"));
+
+      for (int nodeId: id_split_map.keySet()) {
+
+        if (!id_split_map.get(nodeId).isSkewed && id_split_map.get(nodeId).variance > varianceCap) {
+          context.getCounter(Counters.NodeCount).increment(1);
+        }
+        else {
+          id_split_map.get(nodeId).isLeaf = true;
+        }
+        context.write(null, new Text(id_split_map.get(nodeId).toString()));
       }
     }
-    fWriter.close();
-    fWriterForLeafs.close();
+  }
 
-    return continueProcessing;
+  public boolean decideSplits(int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
+
+    final Configuration conf = getConf();
+    final Job job = Job.getInstance(conf, "Best Splits");
+    job.setJarByClass(DecisionTree.class);
+    final Configuration jobConf = job.getConfiguration();
+    jobConf.set("mapreduce.output.textoutputformat.separator", "");
+    jobConf.set("varianceCap", String.valueOf(varianceCap));
+    //jobConf.setInt("mapreduce.input.lineinputformat.linespermap", 4400);
+    job.setMapperClass(DecideSplitMapper.class);
+    job.setReducerClass(DecideSplitReducer.class);
+    job.setMapOutputKeyClass(IntWritable.class);
+    job.setOutputKeyClass(NullWritable.class);
+    job.setOutputValueClass(Text.class);
+    FileInputFormat.addInputPath(job, new Path(treeLevel + "/" + layerCount));
+    FileOutputFormat.setOutputPath(job, new Path(splits + "/" + layerCount));
+    job.setNumReduceTasks(1);
+    job.waitForCompletion(true);
+
+    long count = job.getCounters().findCounter(Counters.NodeCount).getValue();
+
+//    Map<Integer, Split> id_split_map = new HashMap<>();
+//
+//    String fileName = treeLevel + "/" + layerCount + "/part-r-";
+//
+//    int r = 0;
+//    // to iterate through the intermediate output files.
+//    while (r < numberOfReduceTasks) {
+//
+//      StringBuilder is = new StringBuilder(String.valueOf(r));
+//
+//      while(is.length() != 5) {
+//        is.insert(0, "0");
+//      }
+//
+//      // get file
+//      File file = new File(fileName + is.toString());
+//
+//      BufferedReader br = new BufferedReader(new FileReader(file));
+//      String line;
+//      while ((line = br.readLine()) != null && !line.equals("")) {
+//
+//        Split split = new Split(line);
+//        int nodeId = split.nodeId;
+//
+//        if (!id_split_map.containsKey(nodeId)) {
+//          id_split_map.put(nodeId, split);
+//        }
+//        else if (id_split_map.get(nodeId).variance > split.variance) {
+//          id_split_map.put(nodeId, split);
+//        }
+//      }
+//      r++;
+//    }
+//
+//    File outFile = new File(splits + "/" + layerCount);
+//    outFile.getParentFile().mkdirs();
+//    outFile.createNewFile();
+//    FileWriter fWriter = new FileWriter(outFile);
+//    File leafNodes = new File(this.leafNodes + "/" + layerCount);
+//    leafNodes.getParentFile().mkdirs();
+//    leafNodes.createNewFile();
+//    FileWriter fWriterForLeafs = new FileWriter(leafNodes);
+//    boolean continueProcessing = false;
+//
+//    for (int nodeId: id_split_map.keySet()) {
+//      if (!id_split_map.get(nodeId).isSkewed && id_split_map.get(nodeId).variance > varianceCap) {
+//        fWriter.write(id_split_map.get(nodeId).toString());
+//        continueProcessing = true;
+//      }
+//      else {
+//        fWriterForLeafs.write(id_split_map.get(nodeId).toString());
+//      }
+//    }
+//    fWriter.close();
+//    fWriterForLeafs.close();
+//
+//
+//
+    return count != 0;
   }
 
   /**
@@ -546,9 +646,7 @@ public class DecisionTree extends Configured implements Tool {
     FileInputFormat.addInputPath(job, new Path(levelData + "/" + layerCount));
     FileOutputFormat.setOutputPath(job, new Path(treeLevel + "/" + layerCount));
 
-    job.waitForCompletion(true);
-
-    return decideSplits(job.getNumReduceTasks(), layerCount);
+    return job.waitForCompletion(true);
   }
 
   private void processDataForNextRound_Job(int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
@@ -564,7 +662,7 @@ public class DecisionTree extends Configured implements Tool {
     job.setOutputValueClass(NullWritable.class);
     //job.setInputFormatClass(FileInputFormat.class);
     job.setNumReduceTasks(0);
-    job.addCacheFile(new Path(splits +"/"+layerCount).toUri());
+    job.addCacheFile(new Path(splits +"/"+layerCount+"/part-r-00000").toUri());
     FileInputFormat.addInputPath(job, new Path(levelData + "/" + layerCount));
     FileOutputFormat.setOutputPath(job, new Path(levelData + "/" + (layerCount + 1)));
     job.waitForCompletion(true);
@@ -645,23 +743,33 @@ public class DecisionTree extends Configured implements Tool {
     preProcessJob();
 
     int layerCount = 1; // depth of the node or the iteration of the tree.
-    boolean continueProcessing; // Flag to stop when leaf node is reached.
 
     do {
       // 3. find the best features to split by for each node in the given layer of the tree.
       // Data is stored in splits data folder.
-      continueProcessing = findBestSplitsJob(layerCount);
+      findBestSplitsJob(layerCount);
 
-      if (!continueProcessing) {
+      // Job 3: Decide Splits
+      // If no more splits are possible
+      if (!decideSplits(layerCount)) {
         break;
       }
 
+
+      // Job 4: Add nodes in each layer to files in layersDataFolder.
+
       // Job 3: Add nodes in each layer to separate files in levelData folder.
+
       processDataForNextRound_Job(layerCount);
 
       layerCount++;
 
     }while (layerCount <= maxDepth); // limits the depth of the decision tree
+
+    // Read the files from splitsFolder and put it in single file.
+    //ReadSplitsBeforeBroadcast(layerCount);
+
+    return layerCount;
 
     // Read data from splits and leaf folders and add it to a single file for braodcasting in next job.
 //    ReadSplitsBeforeBroadcast(layerCount); // Read the files from splitsFolder and put it in single file.
@@ -675,7 +783,8 @@ public class DecisionTree extends Configured implements Tool {
    */
   public static void main(final String[] args) {
     if (args.length != 12) {
-      throw new Error("Twelve arguments required");
+      throw new Error("12 arguments required");
+
     }
     try {
       ToolRunner.run(new DecisionTree(), args); // Decision Tree Training Job.

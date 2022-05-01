@@ -6,7 +6,7 @@ hadoop.root=~/hadoop/hadoop-2.9.1
 jar.name=mr-demo-1.0.jar# the jar name for your project
 jar.path=target/${jar.name}
 job.name=decisiontree.DecisionTree
-local.trainInput=input/train
+local.trainInput=input/sample
 local.testInput=input/test
 local.trainSample=intermediary/trainSample
 local.testSample=intermediary/testSample
@@ -17,7 +17,8 @@ local.broadcastSplits=intermediary/broadcastSplits
 local.leafNodes=intermediary/leafNodes
 local.varianceCap=0.08
 local.maxDepth=15
-local.sampleSize=1
+local.sampleSize=100
+local.intermediary=intermediary
 # Pseudo-Cluster Execution
 hdfs.user.name=joe
 hdfs.input=input
@@ -25,21 +26,20 @@ hdfs.output=output
 # AWS EMR Execution
 aws.emr.release=emr-5.17.0# previous version 5.17.0 | edit this with current EMR version.
 aws.region=us-east-1
-aws.bucket.name=bucketfortwitterusers# edit this with your bucket name (from S3) for the project.
+aws.bucket.name=drgad24dt# edit this with your bucket name (from S3) for the project.
 aws.subnet.id=subnet-6356553a# no need to edit this
-aws.trainInput=input/train
-aws.testInput=input/test
-aws.trainSample=intermediary/trainSample
-aws.testSample=intermediary/testSample
-aws.levelData=intermediary/levelData
-aws.treeLevel=intermediary/treeLevel
-aws.splits=intermediary/splits
-aws.broadcastSplits=intermediary/broadcastSplits
-aws.leafNodes=intermediary/leafNodes
+aws.trainInput=train
+aws.testInput=test
+aws.trainSample=trainSample
+aws.testSample=testSample
+aws.levelData=levelData
+aws.treeLevel=treeLevel
+aws.splits=splits
+aws.broadcastSplits=broadcastSplits
+aws.leafNodes=leafNodes
 aws.varianceCap=0.08
 aws.maxDepth=15
 aws.sampleSize=1
-aws.sample=sample
 aws.log.dir=logMR
 aws.num.nodes=5#5 # 8 is a big cluster might not be available for free tier
 aws.instance.type=m4.large#m4.xlarge
@@ -51,12 +51,12 @@ jar:
 
 # Removes local output directory.
 clean-local-output:
-	rm -rf ${local.output}*
+	rm -rf ${local.intermediary}*
 
 # Runs standalone  --- runs on local system
 # Make sure Hadoop  is set up (in /etc/hadoop files) for standalone operation (not pseudo-cluster).
 # https://hadoop.apache.org/docs/current/hadoop-project-dist/hadoop-common/SingleCluster.html#Standalone_Operation
-local: jar
+local: jar clean-local-output
 	${hadoop.root}/bin/hadoop jar ${jar.path} ${job.name} ${local.trainInput} ${local.testInput} ${local.trainSample} ${local.testSample} ${local.levelData} ${local.treeLevel} ${local.splits} ${local.broadcastSplits} ${local.leafNodes} ${local.varianceCap} ${local.maxDepth} ${local.sampleSize}
 
 # Start HDFS
@@ -118,11 +118,18 @@ make-bucket:
 
 # Upload data to S3 input dir.
 upload-input-aws: make-bucket
-	aws s3 sync ${local.input} s3://${aws.bucket.name}/${aws.input}
+	aws s3 sync ${local.testInput} s3://${aws.bucket.name}/${aws.testInput}
+	aws s3 sync ${local.trainInput} s3://${aws.bucket.name}/${aws.trainInput}
 
 # Delete S3 output dir.
 delete-output-aws:
-	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.output}*"
+	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.trainSample}*"
+	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.testSample}*"
+	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.levelData}*"
+	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.treeLevel}*"
+	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.splits}*"
+	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.broadcastSplits}*"
+	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.leafNodes}*"
 
 # Upload application to S3 bucket.
 upload-app-aws:
@@ -131,11 +138,11 @@ upload-app-aws:
 # Main EMR launch.
 aws: jar upload-app-aws delete-output-aws
 	aws emr create-cluster \
-		--name "TwitterCount MR Cluster" \
+		--name "Decision Tree" \
 		--release-label ${aws.emr.release} \
 		--instance-groups '[{"InstanceCount":${aws.num.nodes},"InstanceGroupType":"CORE","InstanceType":"${aws.instance.type}"},{"InstanceCount":1,"InstanceGroupType":"MASTER","InstanceType":"${aws.instance.type}"}]' \
 	    --applications Name=Hadoop \
-	    --steps '[{"Args":["${job.name}","s3://${aws.bucket.name}/${aws.input}","s3://${aws.bucket.name}/${aws.output}"],"Type":"CUSTOM_JAR","Jar":"s3://${aws.bucket.name}/${jar.name}","ActionOnFailure":"TERMINATE_CLUSTER","Name":"Custom JAR"}]' \
+	    --steps '[{"Args":["${job.name}","s3://${aws.bucket.name}/${aws.trainInput}","s3://${aws.bucket.name}/${aws.testInput}","s3://${aws.bucket.name}/${aws.trainSample}","s3://${aws.bucket.name}/${aws.testSample}","s3://${aws.bucket.name}/${aws.levelData}","s3://${aws.bucket.name}/${aws.treeLevel}","s3://${aws.bucket.name}/${aws.splits}","s3://${aws.bucket.name}/${aws.broadcastSplits}","s3://${aws.bucket.name}/${aws.leafNodes}","${aws.varianceCap}","${aws.maxDepth}","${aws.sampleSize}"],"Type":"CUSTOM_JAR","Jar":"s3://${aws.bucket.name}/${jar.name}","ActionOnFailure":"TERMINATE_CLUSTER","Name":"Custom JAR"}]' \
 		--log-uri s3://${aws.bucket.name}/${aws.log.dir} \
 		--use-default-roles \
 		--enable-debugging \
