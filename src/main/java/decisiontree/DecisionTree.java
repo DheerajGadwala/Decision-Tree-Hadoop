@@ -408,7 +408,7 @@ public class DecisionTree extends Configured implements Tool {
     job.waitForCompletion(true);
   }
 
-  private static class Split {
+  public static class Split {
     int nodeId;
     int featureId;
     double splitPoint;
@@ -416,7 +416,7 @@ public class DecisionTree extends Configured implements Tool {
     double mean;
     boolean isSkewed;
 
-    Split(int nodeId, int featureId, double splitPoint, double variance, double mean, boolean isSkewed) {
+    public Split(int nodeId, int featureId, double splitPoint, double variance, double mean, boolean isSkewed) {
       this.nodeId = nodeId;
       this.featureId = featureId;
       this.splitPoint = splitPoint;
@@ -425,7 +425,7 @@ public class DecisionTree extends Configured implements Tool {
       this.isSkewed = isSkewed;
     }
 
-    Split(String line) {
+    public Split(String line) {
       String[] data = line.split(" ");
       nodeId = Integer.parseInt(data[0]);
       featureId = Integer.parseInt(data[1]);
@@ -433,6 +433,22 @@ public class DecisionTree extends Configured implements Tool {
       variance = Double.parseDouble(data[3]);
       mean = Double.parseDouble(data[4]);
       isSkewed = Boolean.parseBoolean(data[5]);
+    }
+
+    public int getNodeId() {
+      return nodeId;
+    }
+
+    public int getFeatureId() {
+      return featureId;
+    }
+
+    public double getSplitPoint() {
+      return splitPoint;
+    }
+
+    public double getMean() {
+      return mean;
     }
 
     @Override
@@ -554,80 +570,6 @@ public class DecisionTree extends Configured implements Tool {
     job.waitForCompletion(true);
   }
 
-  public static class ReadSplitFolder extends Mapper<Object, Text, NullWritable, Text> {
-    @Override
-    public void map(final Object key, final Text value, final Context context)
-            throws IOException, InterruptedException {
-
-      final StringTokenizer itr = new StringTokenizer(value.toString(), "\n",
-              false);
-
-      while (itr.hasMoreTokens()) {
-        Split split = new Split(itr.nextToken());
-        StringBuilder val = new StringBuilder();
-        val.append(split.nodeId).append(" ").append(split.featureId).append(" ").append(split.splitPoint);
-        val.append(" ").append(split.mean).append("\n");
-        context.write(null, new Text(val.toString()));
-      }
-    }
-  }
-
-  public static class ReadLeafFolder extends Mapper<Object, Text, NullWritable, Text> {
-    @Override
-    public void map(final Object key, final Text value, final Context context)
-            throws IOException, InterruptedException {
-
-      final StringTokenizer itr = new StringTokenizer(value.toString(), "\n",
-              false);
-
-      while (itr.hasMoreTokens()) {
-        Split leaf = new Split(itr.nextToken());
-        StringBuilder val = new StringBuilder();
-        val.append(leaf.nodeId).append(" ").append(leaf.featureId).append(" ").append(leaf.splitPoint);
-        val.append(" ").append(leaf.mean).append("\n");
-        context.write(null, new Text(val.toString()));
-      }
-    }
-  }
-
-  public static class CombineLeafAndSplitNodesForBroadcast extends Reducer<NullWritable, Text, Text, NullWritable> {
-    @Override
-    public void reduce(final NullWritable key, final Iterable<Text> values, final Context context)
-            throws IOException, InterruptedException {
-
-      for (Text node : values) {
-        context.write(new Text(node), null);
-      }
-    }
-  }
-
-  public void CombinerSplitAndLeafNodesJobs() throws IOException, InterruptedException, ClassNotFoundException {
-    final Configuration conf = getConf();
-    final Job job = Job.getInstance(conf, "Data Processing for Best Splits");
-    job.setJarByClass(DecisionTree.class);
-    final Configuration jobConf = job.getConfiguration();
-    jobConf.set("mapreduce.output.textoutputformat.separator", " ");
-    //jobConf.setInt("mapreduce.input.lineinputformat.linespermap", 4400);
-
-    // Mapper classes
-    MultipleInputs.addInputPath(job, new Path("splits"), TextInputFormat.class,
-            ReadSplitFolder.class); // Input to ReadSplitFolder.class
-    MultipleInputs.addInputPath(job, new Path("leafNodes"), TextInputFormat.class,
-            ReadLeafFolder.class); // Input to ReadLeafFolder.class
-    job.setMapOutputKeyClass(NullWritable.class);
-    job.setMapOutputValueClass(Text.class);
-
-    // Reducer
-    job.setReducerClass(CombineLeafAndSplitNodesForBroadcast.class);
-    job.setOutputKeyClass(Text.class);
-    job.setOutputValueClass(NullWritable.class);
-
-    // Output folder
-    FileOutputFormat.setOutputPath(job, new Path(broadcastSplits));
-
-    job.waitForCompletion(true);
-  }
-
   private void ReadSplitsBeforeBroadcast(int layerCount) throws Exception {
     // Splits folder will have layer count number of files.
     // read all those files and put the data into one single file
@@ -722,7 +664,6 @@ public class DecisionTree extends Configured implements Tool {
     }while (layerCount <= maxDepth); // limits the depth of the decision tree
 
     // Read data from splits and leaf folders and add it to a single file for braodcasting in next job.
-    CombinerSplitAndLeafNodesJobs();
 //    ReadSplitsBeforeBroadcast(layerCount); // Read the files from splitsFolder and put it in single file.
     return 1;
   }
