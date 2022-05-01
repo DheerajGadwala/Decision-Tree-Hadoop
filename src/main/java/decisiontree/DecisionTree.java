@@ -471,6 +471,9 @@ public class DecisionTree extends Configured implements Tool {
   }
 
 
+  /**
+   * Read treeLevel folder and emit (nodeId, node).
+   */
   public static class DecideSplitMapper extends Mapper<Object, Text, IntWritable, Text> {
     @Override
     public void map(final Object key, final Text value, final Context context) throws IOException, InterruptedException {
@@ -485,6 +488,9 @@ public class DecisionTree extends Configured implements Tool {
   }
 
 
+  /**
+   * For each nodeID, find the split with minimum variance.
+   */
   public static class DecideSplitReducer extends Reducer<IntWritable, Text, NullWritable, Text> {
 
     Map<Integer, Split> id_split_map = new HashMap<>();
@@ -497,9 +503,11 @@ public class DecisionTree extends Configured implements Tool {
 
         int nodeId = split.nodeId;
 
+        // 1st occurrence.
         if (!id_split_map.containsKey(nodeId)) {
           id_split_map.put(nodeId, split);
         }
+        // find the minimum.
         else if (id_split_map.get(nodeId).variance > split.variance) {
           id_split_map.put(nodeId, split);
         }
@@ -508,7 +516,7 @@ public class DecisionTree extends Configured implements Tool {
 
     @Override
     public void cleanup(Context context) throws IOException, InterruptedException {
-
+      // only emit nodes that have variance greater than this cap.
       double varianceCap = Double.parseDouble(context.getConfiguration().get("varianceCap"));
 
       for (int nodeId: id_split_map.keySet()) {
@@ -545,64 +553,6 @@ public class DecisionTree extends Configured implements Tool {
 
     long count = job.getCounters().findCounter(Counters.NodeCount).getValue();
 
-//    Map<Integer, Split> id_split_map = new HashMap<>();
-//
-//    String fileName = treeLevel + "/" + layerCount + "/part-r-";
-//
-//    int r = 0;
-//    // to iterate through the intermediate output files.
-//    while (r < numberOfReduceTasks) {
-//
-//      StringBuilder is = new StringBuilder(String.valueOf(r));
-//
-//      while(is.length() != 5) {
-//        is.insert(0, "0");
-//      }
-//
-//      // get file
-//      File file = new File(fileName + is.toString());
-//
-//      BufferedReader br = new BufferedReader(new FileReader(file));
-//      String line;
-//      while ((line = br.readLine()) != null && !line.equals("")) {
-//
-//        Split split = new Split(line);
-//        int nodeId = split.nodeId;
-//
-//        if (!id_split_map.containsKey(nodeId)) {
-//          id_split_map.put(nodeId, split);
-//        }
-//        else if (id_split_map.get(nodeId).variance > split.variance) {
-//          id_split_map.put(nodeId, split);
-//        }
-//      }
-//      r++;
-//    }
-//
-//    File outFile = new File(splits + "/" + layerCount);
-//    outFile.getParentFile().mkdirs();
-//    outFile.createNewFile();
-//    FileWriter fWriter = new FileWriter(outFile);
-//    File leafNodes = new File(this.leafNodes + "/" + layerCount);
-//    leafNodes.getParentFile().mkdirs();
-//    leafNodes.createNewFile();
-//    FileWriter fWriterForLeafs = new FileWriter(leafNodes);
-//    boolean continueProcessing = false;
-//
-//    for (int nodeId: id_split_map.keySet()) {
-//      if (!id_split_map.get(nodeId).isSkewed && id_split_map.get(nodeId).variance > varianceCap) {
-//        fWriter.write(id_split_map.get(nodeId).toString());
-//        continueProcessing = true;
-//      }
-//      else {
-//        fWriterForLeafs.write(id_split_map.get(nodeId).toString());
-//      }
-//    }
-//    fWriter.close();
-//    fWriterForLeafs.close();
-//
-//
-//
     return count != 0;
   }
 
@@ -655,58 +605,14 @@ public class DecisionTree extends Configured implements Tool {
     job.waitForCompletion(true);
   }
 
-  private void ReadSplitsBeforeBroadcast(int layerCount) throws Exception {
-    // Splits folder will have layer count number of files.
-    // read all those files and put the data into one single file
-
-    // Input files
-    String inFile = splits + "/";
-    String leafFile = leafNodes + "/";
-
-    // Output files
-    File outFile = new File(broadcastSplits+"/data");
-    outFile.getParentFile().mkdirs(); // creates the directory "output"
-    outFile.createNewFile();
-    FileWriter fWriter = new FileWriter(outFile);
-
-    // cache the depth of the tree so that we can create an array of size (2^n) to construct a tree.
-    fWriter.write(layerCount + "\n");
-    int r = 1;
-    // to iterate through the intermediate output files.
-    while (r <= layerCount) {
-
-      // Input file
-      File splitNodes = new File(inFile + r);
-      File leafNodes = new File(leafFile + r);
-
-      BufferedReader brSplit = new BufferedReader(new FileReader(splitNodes));
-      BufferedReader brLeaf = new BufferedReader(new FileReader(leafNodes));
-      String line;
-
-      while ((line = brSplit.readLine()) != null && !line.equals("")) {
-        Split split = new Split(line);
-        fWriter.write("" + split.nodeId + " " + split.featureId + " " + split.splitPoint + " " + split.mean + "\n");
-      }
-
-      while ((line = brLeaf.readLine()) != null && !line.equals("")) {
-        Split split = new Split(line);
-        fWriter.write("" + split.nodeId + " " + split.featureId + " " + split.splitPoint + " " + split.mean + "\n");
-      }
-      r++;
-    }
-    fWriter.close();
-  }
-
   /**
    * Trains the decision tree.
    * 1. sampleJob() : Randomly sample the input data.
    * 2. preProcessJob() : Add node ids to each record.
    * 3. findBestSplitsJob() : find the best features to split by for each node in the given layer of the tree.
-   * 4. processDataForNextRound_Job() : Add nodes in each layer to separate files in levelData folder.
-   * 5. ReadSplitsBeforeBroadcast() : Read the files from splitsFolder and put it in single file.
-   * @param args
-   * @return
-   * @throws Exception
+   * 4. decideSplits() : for each node find the split with minimum variance.
+   * 5. processDataForNextRound_Job() : Add nodes in each layer to separate files in levelData folder.
+   *
    */
   @Override
   public int run(final String[] args) throws Exception {
@@ -723,7 +629,7 @@ public class DecisionTree extends Configured implements Tool {
     maxDepth = Integer.parseInt(args[10]);
     sampleSize = Double.parseDouble(args[11]);
 
-    // 1. handles sampling
+    // 1. Random sampling
     sampleJob(getConf(), trainInput, trainSample, sampleSize);
 
     // 2. Read data and append node id = 1 to each record.
@@ -736,30 +642,20 @@ public class DecisionTree extends Configured implements Tool {
       // Data is stored in splits data folder.
       findBestSplitsJob(layerCount);
 
-      // Job 3: Decide Splits
+      // 4: Decide Splits
       // If no more splits are possible
       if (!decideSplits(layerCount)) {
         break;
       }
 
-
-      // Job 4: Add nodes in each layer to files in layersDataFolder.
-
-      // Job 3: Add nodes in each layer to separate files in levelData folder.
-
+      // 5. Change node ids such that a tree can be constructed.
       processDataForNextRound_Job(layerCount);
 
       layerCount++;
 
     }while (layerCount <= maxDepth); // limits the depth of the decision tree
 
-    // Read the files from splitsFolder and put it in single file.
-    //ReadSplitsBeforeBroadcast(layerCount);
-
-    return layerCount;
-
-    // Read data from splits and leaf folders and add it to a single file for broadcasting in next job.
-//    ReadSplitsBeforeBroadcast(layerCount); // Read the files from splitsFolder and put it in single file.
+    return 1;
   }
 
   /**
@@ -774,7 +670,7 @@ public class DecisionTree extends Configured implements Tool {
     }
     try {
       ToolRunner.run(new DecisionTree(), args); // Decision Tree Training Job.
-      ToolRunner.run(new DecisionTreeTest(), args); // Decision Tree Testing Job
+//      ToolRunner.run(new DecisionTreeTest(), args); // Decision Tree Testing Job
     } catch (final Exception e) {
       logger.error("", e);
     }
