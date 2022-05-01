@@ -246,6 +246,7 @@ public class DecisionTreeTest extends Configured implements Tool {
         logger.info("count : " + count);
         logger.info(count/totalPredictions * 100);
         logger.info("*******************************");
+        System.out.println(count/totalPredictions * 100);
       }
     }
   }

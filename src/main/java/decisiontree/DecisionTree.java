@@ -670,7 +670,7 @@ public class DecisionTree extends Configured implements Tool {
 
     }
     try {
-//      ToolRunner.run(new DecisionTree(), args); // Decision Tree Training Job.
+      //ToolRunner.run(new DecisionTree(), args); // Decision Tree Training Job.
       ToolRunner.run(new DecisionTreeTest(), args); // Decision Tree Testing Job
     } catch (final Exception e) {
       logger.error("", e);

@@ -1,0 +1,143 @@
+2022-05-01 22:36:33,679 INFO org.apache.hadoop.yarn.client.RMProxy (main): Connecting to ResourceManager at ip-172-31-24-238.ec2.internal/172.31.24.238:8032
+2022-05-01 22:36:35,572 INFO org.apache.hadoop.mapreduce.lib.input.FileInputFormat (main): Total input files to process : 2
+2022-05-01 22:36:35,586 INFO com.hadoop.compression.lzo.GPLNativeCodeLoader (main): Loaded native gpl library
+2022-05-01 22:36:35,589 INFO com.hadoop.compression.lzo.LzoCodec (main): Successfully loaded & initialized native-lzo library [hadoop-lzo rev 29dbe82f1ecfd8384b89f1a32e5e2d9e5dfd7724]
+2022-05-01 22:36:36,167 INFO org.apache.hadoop.mapreduce.JobSubmitter (main): number of splits:12
+2022-05-01 22:36:36,329 INFO org.apache.hadoop.mapreduce.JobSubmitter (main): Submitting tokens for job: job_1651444510133_0001
+2022-05-01 22:36:36,871 INFO org.apache.hadoop.yarn.client.api.impl.YarnClientImpl (main): Submitted application application_1651444510133_0001
+2022-05-01 22:36:36,970 INFO org.apache.hadoop.mapreduce.Job (main): The url to track the job: http://ip-172-31-24-238.ec2.internal:20888/proxy/application_1651444510133_0001/
+2022-05-01 22:36:36,971 INFO org.apache.hadoop.mapreduce.Job (main): Running job: job_1651444510133_0001
+2022-05-01 22:36:47,219 INFO org.apache.hadoop.mapreduce.Job (main): Job job_1651444510133_0001 running in uber mode : false
+2022-05-01 22:36:47,220 INFO org.apache.hadoop.mapreduce.Job (main):  map 0% reduce 0%
+2022-05-01 22:36:58,398 INFO org.apache.hadoop.mapreduce.Job (main):  map 8% reduce 0%
+2022-05-01 22:36:59,403 INFO org.apache.hadoop.mapreduce.Job (main):  map 25% reduce 0%
+2022-05-01 22:37:00,408 INFO org.apache.hadoop.mapreduce.Job (main):  map 33% reduce 0%
+2022-05-01 22:37:01,414 INFO org.apache.hadoop.mapreduce.Job (main):  map 42% reduce 0%
+2022-05-01 22:37:02,418 INFO org.apache.hadoop.mapreduce.Job (main):  map 58% reduce 0%
+2022-05-01 22:37:03,432 INFO org.apache.hadoop.mapreduce.Job (main):  map 83% reduce 0%
+2022-05-01 22:37:04,436 INFO org.apache.hadoop.mapreduce.Job (main):  map 100% reduce 0%
+2022-05-01 22:37:05,447 INFO org.apache.hadoop.mapreduce.Job (main): Job job_1651444510133_0001 completed successfully
+2022-05-01 22:37:05,565 INFO org.apache.hadoop.mapreduce.Job (main): Counters: 36
+	File System Counters
+		FILE: Number of bytes read=0
+		FILE: Number of bytes written=2015222
+		FILE: Number of read operations=0
+		FILE: Number of large read operations=0
+		FILE: Number of write operations=0
+		HDFS: Number of bytes read=1176
+		HDFS: Number of bytes written=0
+		HDFS: Number of read operations=12
+		HDFS: Number of large read operations=0
+		HDFS: Number of write operations=0
+		S3: Number of bytes read=722110935
+		S3: Number of bytes written=722015338
+		S3: Number of read operations=0
+		S3: Number of large read operations=0
+		S3: Number of write operations=0
+	Job Counters 
+		Killed map tasks=1
+		Launched map tasks=12
+		Data-local map tasks=12
+		Total time spent by all maps in occupied slots (ms)=6555120
+		Total time spent by all reduces in occupied slots (ms)=0
+		Total time spent by all map tasks (ms)=136565
+		Total vcore-milliseconds taken by all map tasks=136565
+		Total megabyte-milliseconds taken by all map tasks=209763840
+	Map-Reduce Framework
+		Map input records=268834
+		Map output records=268834
+		Input split bytes=1176
+		Spilled Records=0
+		Failed Shuffles=0
+		Merged Map outputs=0
+		GC time elapsed (ms)=3188
+		CPU time spent (ms)=71810
+		Physical memory (bytes) snapshot=5533483008
+		Virtual memory (bytes) snapshot=39694331904
+		Total committed heap usage (bytes)=5382864896
+	File Input Format Counters 
+		Bytes Read=722110935
+	File Output Format Counters 
+		Bytes Written=722015338
+2022-05-01 22:37:05,635 INFO org.apache.hadoop.yarn.client.RMProxy (main): Connecting to ResourceManager at ip-172-31-24-238.ec2.internal/172.31.24.238:8032
+2022-05-01 22:37:06,145 INFO org.apache.hadoop.mapreduce.lib.input.FileInputFormat (main): Total input files to process : 12
+2022-05-01 22:37:06,240 INFO org.apache.hadoop.mapreduce.JobSubmitter (main): number of splits:12
+2022-05-01 22:37:06,291 INFO org.apache.hadoop.mapreduce.JobSubmitter (main): Submitting tokens for job: job_1651444510133_0002
+2022-05-01 22:37:06,332 INFO org.apache.hadoop.yarn.client.api.impl.YarnClientImpl (main): Submitted application application_1651444510133_0002
+2022-05-01 22:37:06,342 INFO org.apache.hadoop.mapreduce.Job (main): The url to track the job: http://ip-172-31-24-238.ec2.internal:20888/proxy/application_1651444510133_0002/
+2022-05-01 22:37:06,342 INFO org.apache.hadoop.mapreduce.Job (main): Running job: job_1651444510133_0002
+2022-05-01 22:37:16,423 INFO org.apache.hadoop.mapreduce.Job (main): Job job_1651444510133_0002 running in uber mode : false
+2022-05-01 22:37:16,424 INFO org.apache.hadoop.mapreduce.Job (main):  map 0% reduce 0%
+2022-05-01 22:37:33,279 INFO org.apache.hadoop.mapreduce.Job (main):  map 42% reduce 0%
+2022-05-01 22:37:34,283 INFO org.apache.hadoop.mapreduce.Job (main):  map 58% reduce 0%
+2022-05-01 22:37:37,297 INFO org.apache.hadoop.mapreduce.Job (main):  map 100% reduce 0%
+2022-05-01 22:37:38,302 INFO org.apache.hadoop.mapreduce.Job (main):  map 100% reduce 100%
+2022-05-01 22:37:39,314 INFO org.apache.hadoop.mapreduce.Job (main): Job job_1651444510133_0002 completed successfully
+2022-05-01 22:37:39,360 INFO org.apache.hadoop.mapreduce.Job (main): Counters: 57
+	File System Counters
+		FILE: Number of bytes read=167
+		FILE: Number of bytes written=2219978
+		FILE: Number of read operations=0
+		FILE: Number of large read operations=0
+		FILE: Number of write operations=0
+		HDFS: Number of bytes read=3036
+		HDFS: Number of bytes written=0
+		HDFS: Number of read operations=27
+		HDFS: Number of large read operations=0
+		HDFS: Number of write operations=2
+		S3: Number of bytes read=722015338
+		S3: Number of bytes written=0
+		S3: Number of read operations=0
+		S3: Number of large read operations=0
+		S3: Number of write operations=0
+	Job Counters 
+		Killed map tasks=1
+		Launched map tasks=12
+		Launched reduce tasks=1
+		Data-local map tasks=12
+		Total time spent by all maps in occupied slots (ms)=8166288
+		Total time spent by all reduces in occupied slots (ms)=267936
+		Total time spent by all map tasks (ms)=170131
+		Total time spent by all reduce tasks (ms)=2791
+		Total vcore-milliseconds taken by all map tasks=170131
+		Total vcore-milliseconds taken by all reduce tasks=2791
+		Total megabyte-milliseconds taken by all map tasks=261321216
+		Total megabyte-milliseconds taken by all reduce tasks=8573952
+	Map-Reduce Framework
+		Map input records=268834
+		Map output records=506939
+		Map output bytes=5545600
+		Map output materialized bytes=504
+		Input split bytes=3036
+		Combine input records=506939
+		Combine output records=24
+		Reduce input groups=2
+		Reduce shuffle bytes=504
+		Reduce input records=24
+		Reduce output records=0
+		Spilled Records=48
+		Shuffled Maps =12
+		Failed Shuffles=0
+		Merged Map outputs=12
+		GC time elapsed (ms)=5310
+		CPU time spent (ms)=162080
+		Physical memory (bytes) snapshot=10146025472
+		Virtual memory (bytes) snapshot=44218953728
+		Total committed heap usage (bytes)=10089922560
+	Shuffle Errors
+		BAD_ID=0
+		CONNECTION=0
+		IO_ERROR=0
+		WRONG_LENGTH=0
+		WRONG_MAP=0
+		WRONG_REDUCE=0
+	decisiontree.DecisionTreeTest$Counter
+		Accuracy=88
+		Record_Count=268834
+	File Input Format Counters 
+		Bytes Read=0
+	File Output Format Counters 
+		Bytes Written=0
+2022-05-01 22:37:39,372 INFO decisiontree.DecisionTreeTest (main): *****************************
+2022-05-01 22:37:39,373 INFO decisiontree.DecisionTreeTest (main): 268834
+2022-05-01 22:37:39,373 INFO decisiontree.DecisionTreeTest (main): *****************************
