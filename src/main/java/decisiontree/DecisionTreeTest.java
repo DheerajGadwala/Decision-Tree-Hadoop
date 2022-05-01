@@ -265,7 +265,7 @@ public class DecisionTreeTest extends Configured implements Tool {
     // Configuration
     final Configuration conf = super.getConf();
 
-    // instance of a job to broadcast tree.
+    // 2. instance of a job to broadcast tree.
     final Job job = Job.getInstance(conf, "DecisionTreeTest");
     job.setJarByClass(DecisionTreeTest.class);
     final Configuration jobConf = job.getConfiguration();
@@ -276,6 +276,7 @@ public class DecisionTreeTest extends Configured implements Tool {
     job.setMapOutputKeyClass(Text.class);
     job.setMapOutputValueClass(IntWritable.class);
     job.setCombinerClass(CustomCombiner.class);
+    job.setCombinerKeyGroupingComparatorClass(CustomComp.class);
     job.setSortComparatorClass(CustomComp.class);
     job.setGroupingComparatorClass(CustomComp.class); // Send dummy nodes first.
     job.setPartitionerClass(CustomPartitioner.class); // Send all the records to single reduce task
