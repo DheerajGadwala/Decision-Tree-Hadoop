@@ -10,10 +10,6 @@ Code author
 -----------
 Dheeraj Gadwala, Savitha Munirajaiah, Shreya Singh
 
-Template author
------------
-Joe Sackett
-
 Installation
 ------------
 These components are installed:
