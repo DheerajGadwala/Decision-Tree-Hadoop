@@ -45,6 +45,6 @@ public class ReadSplitsBeforeBroadcast {
     }
 
     public static void main(String[] args) throws Exception {
-        combineSplitFiles(15);
+        combineSplitFiles(13);
     }
 }

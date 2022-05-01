@@ -179,7 +179,7 @@ public class DecisionTree extends Configured implements Tool {
         double mean = 0.0;
         int count = 0;
         for (DTValue valueComps: values) {
-          mean += valueComps.value.get() * valueComps.count.get();
+          mean += valueComps.value.get() * valueComps.count.get(); // value = rating; count = count of each rating.
           count += valueComps.count.get();
         }
         if (count != 0) {
@@ -226,22 +226,18 @@ public class DecisionTree extends Configured implements Tool {
         }
         if (variance1_isSet && variance2_isSet) {
 
-          double varianceForSplit = (
-              varianceOfSplit_1 * countOfSplit_1
-                  + varianceOfSplit_2 * countOfSplit_2
-          ) / (countOfSplit_1 + countOfSplit_2);
-
-          double mean = (
-              meanOfSplit_1 * countOfSplit_1
-                  + meanOfSplit_2 * countOfSplit_2
-          ) / (countOfSplit_1 + countOfSplit_2);
+          double varianceForSplit;
+          double mean;
+          varianceForSplit = (varianceOfSplit_1 * countOfSplit_1 + varianceOfSplit_2 * countOfSplit_2) / (countOfSplit_1 + countOfSplit_2);
+          mean = (meanOfSplit_1 * countOfSplit_1 + meanOfSplit_2 * countOfSplit_2) / (countOfSplit_1 + countOfSplit_2);
 
           // node with minimum variance
           if ( !smallestVarianceMap.containsKey(nodeId) || (smallestVarianceMap.containsKey(nodeId)
               && varianceForSplit < smallestVarianceMap.get(nodeId).variance )) {
 
+            // checks if all the data is on one side of the split.
             Split split = new Split(nodeId, key.featureId.get(), key.splitPoint.get(), varianceForSplit, mean,
-                countOfSplit_1 == 0 || countOfSplit_2 == 0); // checks if all the data is on one side of the split.
+                countOfSplit_1 == 0 || countOfSplit_2 == 0);
             smallestVarianceMap.put(nodeId, split);
           }
           mean1_isSet = false;
@@ -273,11 +269,14 @@ public class DecisionTree extends Configured implements Tool {
     }
   }
 
+  /**
+   * Grouping comparator to send all
+   */
   public static class GroupingComparator extends WritableComparator {
 
     public GroupingComparator() {
       super(DTKey.class, true);
-    } // Todo: what is createInstances?
+    }
 
     @Override
     public int compare(WritableComparable wc1, WritableComparable wc2) {
@@ -349,6 +348,7 @@ public class DecisionTree extends Configured implements Tool {
     }
   }
 
+  // Random Sampling of input data
   public static class Sampling extends Mapper<Object, Text, NullWritable, Text> {
 
     private final Random randomNumber = new Random();
@@ -411,6 +411,7 @@ public class DecisionTree extends Configured implements Tool {
     job.waitForCompletion(true);
   }
 
+  // Represents each node after splits.
   public static class Split {
     int nodeId;
     int featureId;
@@ -487,7 +488,6 @@ public class DecisionTree extends Configured implements Tool {
     }
   }
 
-
   /**
    * For each nodeID, find the split with minimum variance.
    */
@@ -503,7 +503,7 @@ public class DecisionTree extends Configured implements Tool {
 
         int nodeId = split.nodeId;
 
-        // 1st occurrence.
+        // 1st occurrence of the node.
         if (!id_split_map.containsKey(nodeId)) {
           id_split_map.put(nodeId, split);
         }
@@ -519,6 +519,7 @@ public class DecisionTree extends Configured implements Tool {
       // only emit nodes that have variance greater than this cap.
       double varianceCap = Double.parseDouble(context.getConfiguration().get("varianceCap"));
 
+      // for each nodeID
       for (int nodeId: id_split_map.keySet()) {
 
         if (!id_split_map.get(nodeId).isSkewed && id_split_map.get(nodeId).variance > varianceCap) {
@@ -669,8 +670,8 @@ public class DecisionTree extends Configured implements Tool {
 
     }
     try {
-      ToolRunner.run(new DecisionTree(), args); // Decision Tree Training Job.
-//      ToolRunner.run(new DecisionTreeTest(), args); // Decision Tree Testing Job
+//      ToolRunner.run(new DecisionTree(), args); // Decision Tree Training Job.
+      ToolRunner.run(new DecisionTreeTest(), args); // Decision Tree Testing Job
     } catch (final Exception e) {
       logger.error("", e);
     }

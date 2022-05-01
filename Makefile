@@ -12,11 +12,11 @@ local.trainSample=intermediary/trainSample
 local.testSample=intermediary/testSample
 local.levelData=intermediary/levelData
 local.treeLevel=intermediary/treeLevel
-local.splits=intermediary/splits
-local.broadcastSplits=intermediary/broadcastSplits
+local.splits=splits
+local.broadcastSplits=broadcastSplits
 local.leafNodes=intermediary/leafNodes
 local.varianceCap=0.08
-local.maxDepth=12
+local.maxDepth=13
 local.sampleSize=100
 local.intermediary=intermediary
 # Pseudo-Cluster Execution
@@ -118,8 +118,9 @@ make-bucket:
 
 # Upload data to S3 input dir.
 upload-input-aws: make-bucket
-	aws s3 sync ${local.testInput} s3://${aws.bucket.name}/${aws.testInput}
-	aws s3 sync ${local.trainInput} s3://${aws.bucket.name}/${aws.trainInput}
+	aws s3 sync ${local.broadcastSplits} s3://${aws.bucket.name}/${aws.broadcastSplits}
+	#aws s3 sync ${local.testInput} s3://${aws.bucket.name}/${aws.testInput}
+	#aws s3 sync ${local.trainInput} s3://${aws.bucket.name}/${aws.trainInput}
 
 # Delete S3 output dir.
 delete-output-aws:
@@ -128,7 +129,7 @@ delete-output-aws:
 	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.levelData}*"
 	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.treeLevel}*"
 	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.splits}*"
-	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.broadcastSplits}*"
+	#aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.broadcastSplits}*"
 	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.leafNodes}*"
 
 # Upload application to S3 bucket.
@@ -150,7 +151,7 @@ aws: jar upload-app-aws delete-output-aws
 
 # Download output from S3.
 download-output-aws: clean-local-output
-	mkdir ${local.output}
+	mkdir ${local.splits}
 	aws s3 sync s3://${aws.bucket.name}/${aws.splits} ${local.splits}
 
 # Change to standalone mode.
