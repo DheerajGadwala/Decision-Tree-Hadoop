@@ -44,10 +44,10 @@ All of the build & execution commands are organized in the Makefile.
 
 6) AWS EMR Hadoop: (you must configure the emr.* config parameters at top of Makefile)
 
-   make upload-input-aws-TrainTest		-- only before first execution
-   make aws-train					-- check for successful execution with web interface (aws.amazon.com)
-   make download-output-aws			-- after successful execution download the split file
-   run ReadSplitsBeforeBroadcast locally
-   make upload-input-aws-broadcastSplits --upload broadcasted split files 
-   for testing:change to DecisionTreeTest in main
-   make aws-test                 --run jar for testing
+   make upload-input-aws-TrainTest		-- only before first execution<br>
+   make aws-train					-- check for successful execution with web interface (aws.amazon.com)<br>
+   make download-output-aws			-- after successful execution download the split file<br>
+   run ReadSplitsBeforeBroadcast locally<br>
+   make upload-input-aws-broadcastSplits --upload broadcasted split files <br>
+   for testing:change to DecisionTreeTest in main<br>
+   make aws-test                 --run jar for testing<br>
