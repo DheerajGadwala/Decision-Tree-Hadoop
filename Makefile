@@ -6,7 +6,7 @@ hadoop.root=~/hadoop/hadoop-2.9.1
 jar.name=mr-demo-1.0.jar# the jar name for your project
 jar.path=target/${jar.name}
 job.name=decisiontree.DecisionTree
-local.trainInput=input/train
+local.trainInput=input/sample
 local.testInput=input/test
 local.trainSample=intermediary/trainSample
 local.testSample=intermediary/testSample
@@ -17,7 +17,7 @@ local.broadcastSplits=intermediary/broadcastSplits
 local.leafNodes=intermediary/leafNodes
 local.varianceCap=0.08
 local.maxDepth=15
-local.sampleSize=1
+local.sampleSize=100
 local.intermediary=intermediary
 # Pseudo-Cluster Execution
 hdfs.user.name=joe
