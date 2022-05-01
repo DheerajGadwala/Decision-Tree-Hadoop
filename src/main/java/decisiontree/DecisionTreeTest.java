@@ -18,17 +18,20 @@ import org.apache.log4j.Logger;
 import java.io.*;
 import java.util.*;
 
+/**
+ * Test the decision tree.
+ */
 public class DecisionTreeTest extends Configured implements Tool {
   private static Node[] tree; // Trained decision tree [broadcast]
-  String testInput, testSample, broadcastSplits;
-  double sampleSize;
 
+  // Counter to count the number of records.
   enum Counter {
     Record_Count
   }
 
   private static final Logger logger = LogManager.getLogger(DecisionTreeTest.class); // log
 
+  // Represents each node in the tree.
   public static class Node {
     int nodeId;
     int featureId;
@@ -43,7 +46,6 @@ public class DecisionTreeTest extends Configured implements Tool {
       this.mean = Double.parseDouble(dataPoints[3]);
     }
 
-
     @Override
     public String toString() {
 
@@ -57,6 +59,10 @@ public class DecisionTreeTest extends Configured implements Tool {
     }
   }
 
+  /**
+   * Custom Comparator to ensure "dummy" nodes come before all.
+   * Used as both Key Comparator and Group Comparator.
+   */
   public static class CustomComp extends WritableComparator {
     public CustomComp() {
       super(Text.class, true);
@@ -80,6 +86,9 @@ public class DecisionTreeTest extends Configured implements Tool {
     }
   }
 
+  /**
+   * Partition data such that all the nodes are sent to the same reduce task.
+   */
   public static class CustomPartitioner extends Partitioner<Text, IntWritable> {
 
     @Override
@@ -89,6 +98,14 @@ public class DecisionTreeTest extends Configured implements Tool {
   }
 
 
+  /**
+   * 1. Broadcast the tree.
+   * 2. At each map task, construct the tree in setup
+   * 3. For each node, traverse the tree until a leaf node is reached by making a decision at each level.
+   *    When leaf node is reached, if mean of current node == input Node's rating then prediction is correct. else wrong.
+   * 4. emit (dummy, 1) for all predictions.
+   * 5. emit (correct, 1) only when prediction is correct.
+   */
   public static class ReadSplits extends Mapper<Object, Text, Text, IntWritable> {
 
     @Override
@@ -140,10 +157,10 @@ public class DecisionTreeTest extends Configured implements Tool {
         String data = itr.nextToken();
 
         context.getCounter(Counter.Record_Count).increment(1);
-        Record dataInput = new Record("0 " + data);
+        Record dataInput = new Record("0 " + data); // since the test data has no node id, append a dummy id (0) to each row and create a record.
 
+        // Traverse to the bottom of the tree.
         Queue<Node> queue = new LinkedList<>();
-
         queue.add(tree[0]);
 
         // until leaf node
@@ -151,19 +168,21 @@ public class DecisionTreeTest extends Configured implements Tool {
           Node curNode = queue.poll();
           int curNodeId = curNode.nodeId - 1;
 
+          // Get left and right node from the tree.
           Node leftNode = (curNodeId * 2 + 1) < tree.length ? tree[curNodeId * 2 + 1] : null;
           Node rightNode = (curNodeId * 2 + 2) < tree.length ? tree[curNodeId * 2 + 2] : null;
 
           // no children so we have reached leaf node
           if (leftNode == null && rightNode == null) {
+            // check if the prediction is correct [true].
             boolean res = Math.round(curNode.mean) == dataInput.getRating().get();
             context.write(new Text("dummy"), new IntWritable(1)); // keep the total count of the record
             if (res) {
-              context.write(new Text("correct"), new IntWritable(1)); // prediction
+              context.write(new Text("correct"), new IntWritable(1)); // prediction is correct
             }
           }
 
-          // check if the given feature is less h
+          // check if the given feature is less than split point.
           else if (dataInput.getFeature(curNode.featureId) < curNode.splitPoint) {
             // move left
             queue.add(leftNode);
@@ -176,6 +195,9 @@ public class DecisionTreeTest extends Configured implements Tool {
     }
   }
 
+  /**
+   * Custom combiner.
+   */
   public static class CustomCombiner extends Reducer<Text, IntWritable, Text, IntWritable> {
     @Override
     public void reduce(final Text key, final Iterable<IntWritable> values, final Context context) throws IOException, InterruptedException {
@@ -194,8 +216,13 @@ public class DecisionTreeTest extends Configured implements Tool {
     }
   }
 
+  /**
+   * Reducer uses order inversion technique to compute the Accuracy.
+   * Accuracy = number of correct predictions / total number of values.
+   * We get the total number of values using "dummy" nodes.
+   */
   public static class EvaluateAccuracy extends Reducer<Text, IntWritable, NullWritable, NullWritable> {
-    double totalPredictions = 0;
+    private double totalPredictions = 0;
 
     @Override
     public void reduce(final Text key, final Iterable<IntWritable> values, final Context context) {
@@ -223,11 +250,12 @@ public class DecisionTreeTest extends Configured implements Tool {
   public int run(final String[] args) throws Exception {
 
     // Params
-    testInput = args[1];
-    testSample = args[3];
-    broadcastSplits = args[7];
-    sampleSize = Double.parseDouble(args[11]);
+    String testInput = args[1];
+    String testSample = args[3];
+    String broadcastSplits = args[7];
+    double sampleSize = Double.parseDouble(args[11]);
 
+    // Sample the test data set.
     DecisionTree.sampleJob(getConf(), testInput, testSample, sampleSize);
 
     // Configuration
@@ -248,13 +276,12 @@ public class DecisionTreeTest extends Configured implements Tool {
     job.setPartitionerClass(CustomPartitioner.class);
     job.setReducerClass(EvaluateAccuracy.class);
     job.setCombinerClass(CustomCombiner.class);
-//    job.setOutputKeyClass(Record.class);
-//    job.setOutputValueClass(Text.class);
+
     job.setNumReduceTasks(1);
 
     MultipleInputs.addInputPath(job, new Path(testInput), TextInputFormat.class,
         DecisionTreeTest.ReadSplits.class);
-    FileOutputFormat.setOutputPath(job, new Path("output"));
+//    FileOutputFormat.setOutputPath(job, new Path("output"));
     job.addCacheFile(new Path(broadcastSplits + "/data").toUri());
 
     int res = job.waitForCompletion(true) ? 1 : 0;

@@ -2,11 +2,11 @@
 
 # Customize these paths for your environment.
 # -----------------------------------------------------------
-hadoop.root=~/hadoop/hadoop-2.9.1
+hadoop.root=/usr/local/hadoop-2.9.1
 jar.name=mr-demo-1.0.jar# the jar name for your project
 jar.path=target/${jar.name}
 job.name=decisiontree.DecisionTree
-local.trainInput=input/sample
+local.trainInput=input/train
 local.testInput=input/test
 local.trainSample=intermediary/trainSample
 local.testSample=intermediary/testSample
@@ -16,7 +16,7 @@ local.splits=intermediary/splits
 local.broadcastSplits=intermediary/broadcastSplits
 local.leafNodes=intermediary/leafNodes
 local.varianceCap=0.08
-local.maxDepth=15
+local.maxDepth=12
 local.sampleSize=100
 local.intermediary=intermediary
 # Pseudo-Cluster Execution
@@ -26,7 +26,7 @@ hdfs.output=output
 # AWS EMR Execution
 aws.emr.release=emr-5.17.0# previous version 5.17.0 | edit this with current EMR version.
 aws.region=us-east-1
-aws.bucket.name=drgad24dt# edit this with your bucket name (from S3) for the project.
+aws.bucket.name=savdt1405# edit this with your bucket name (from S3) for the project.
 aws.subnet.id=subnet-6356553a# no need to edit this
 aws.trainInput=train
 aws.testInput=test
@@ -38,11 +38,11 @@ aws.splits=splits
 aws.broadcastSplits=broadcastSplits
 aws.leafNodes=leafNodes
 aws.varianceCap=0.08
-aws.maxDepth=15
-aws.sampleSize=1
+aws.maxDepth=13
+aws.sampleSize=2
 aws.log.dir=logMR
-aws.num.nodes=5#5 # 8 is a big cluster might not be available for free tier
-aws.instance.type=m4.large#m4.xlarge
+aws.num.nodes=8#5 # 8 is a big cluster might not be available for free tier
+aws.instance.type=m4.xlarge#m4.xlarge
 # -----------------------------------------------------------
 
 # Compiles code and builds jar (with dependencies).
@@ -151,7 +151,7 @@ aws: jar upload-app-aws delete-output-aws
 # Download output from S3.
 download-output-aws: clean-local-output
 	mkdir ${local.output}
-	aws s3 sync s3://${aws.bucket.name}/${aws.output} ${local.output}
+	aws s3 sync s3://${aws.bucket.name}/${aws.splits} ${local.splits}
 
 # Change to standalone mode.
 switch-standalone:

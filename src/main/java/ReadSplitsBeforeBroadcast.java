@@ -5,7 +5,12 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 
+/**
+ * Read data from splits and add the data into a single file.
+ * Run this program locally before testing decision tree.
+ */
 public class ReadSplitsBeforeBroadcast {
+
     private static void combineSplitFiles(int layerCount) throws Exception {
         // Splits folder will have layer count number of files.
         // read all those files and put the data into one single file
@@ -22,12 +27,11 @@ public class ReadSplitsBeforeBroadcast {
         // cache the depth of the tree so that we can create an array of size (2^n) to construct a tree.
         fWriter.write(layerCount + "\n");
         int r = 1;
+
         // to iterate through the intermediate output files.
         while (r <= layerCount) {
-
             // Input file
             File splitNodes = new File(inFile + r +"/part-r-00000");
-
             BufferedReader brSplit = new BufferedReader(new FileReader(splitNodes));
             String line;
 
@@ -40,7 +44,7 @@ public class ReadSplitsBeforeBroadcast {
         fWriter.close();
     }
 
-    public void main(String[] args) throws Exception {
+    public static void main(String[] args) throws Exception {
         combineSplitFiles(15);
     }
 }
