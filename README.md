@@ -2,6 +2,10 @@
 # CS6240-project
 Spring 22
 
+**Project Overview**
+--------------------
+Implemented Decision tree algorithm from scratch for training and testing on distributed systems [AWS] using MapReduce framework. Dataset used for training is about 1.35GB and 600MB for testing. Used 'Reduction by variance' technique to decide the best splits for decision tree. 
+
 Code author
 -----------
 Dheeraj Gadwala, Savitha Munirajaiah, Shreya Singh
@@ -51,3 +55,11 @@ All of the build & execution commands are organized in the Makefile.
    make upload-input-aws-broadcastSplits --upload broadcasted split files <br>
    for testing:change to DecisionTreeTest in main<br>
    make aws-test                 --run jar for testing<br>
+   
+**Usage**
+---------
+1. Configure training dataset and run the DecisionTree.java to start training the model.
+2. The trained decision tree model is stored in splits folder.
+3. Locally run ReadSplitsBeforeBroadcast.java class.
+4. Output from step 3 with the test dataset is used to run the DecisionTreeTest.java job.
+5. The Accuracy of the model is printed in system.out.
