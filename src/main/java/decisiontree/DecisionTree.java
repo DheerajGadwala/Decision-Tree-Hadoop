@@ -20,8 +20,6 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -486,16 +484,6 @@ public class DecisionTree extends Configured implements Tool {
     }
   }
 
-  // Serialized computation.
-  public boolean decideSplits(int numberOfReduceTasks, int layerCount) throws IOException {
-    Map<Integer, Split> id_split_map = new HashMap<>();
-    String fileName = treeLevel + "/" + layerCount + "/part-r-";
-
-    int r = 0;
-
-    // to iterate through the intermediate output files.
-    while (r < numberOfReduceTasks) {
-
 
   public static class DecideSplitReducer extends Reducer<IntWritable, Text, NullWritable, Text> {
 
@@ -622,12 +610,11 @@ public class DecisionTree extends Configured implements Tool {
    * Find the best features to split by for each node in the given layer of the tree.
    *
    * @param layerCount Maximum depth of the tree.
-   * @return true if there are more layers to trains else false.
    * @throws IOException
    * @throws ClassNotFoundException
    * @throws InterruptedException
    */
-  private boolean findBestSplitsJob(int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
+  private void findBestSplitsJob(int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
 
     final Configuration conf = getConf();
     final Job job = Job.getInstance(conf, "Best Splits");
@@ -646,7 +633,7 @@ public class DecisionTree extends Configured implements Tool {
     FileInputFormat.addInputPath(job, new Path(levelData + "/" + layerCount));
     FileOutputFormat.setOutputPath(job, new Path(treeLevel + "/" + layerCount));
 
-    return job.waitForCompletion(true);
+    job.waitForCompletion(true);
   }
 
   private void processDataForNextRound_Job(int layerCount) throws IOException, ClassNotFoundException, InterruptedException {
@@ -771,9 +758,8 @@ public class DecisionTree extends Configured implements Tool {
 
     return layerCount;
 
-    // Read data from splits and leaf folders and add it to a single file for braodcasting in next job.
+    // Read data from splits and leaf folders and add it to a single file for broadcasting in next job.
 //    ReadSplitsBeforeBroadcast(layerCount); // Read the files from splitsFolder and put it in single file.
-    return 1;
   }
 
   /**
