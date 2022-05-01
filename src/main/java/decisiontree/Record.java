@@ -13,8 +13,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 /**
- * Represents a record in the input.
- * Each record has an id, a rating and features along with their values.
+ * Represents a row in the input file.
+ * Each record has an id, rating and features along with their values.
  */
 public class Record implements Writable {
 
@@ -111,7 +111,12 @@ public class Record implements Writable {
   }
 
   public DoubleWritable getRating() {
-    return new DoubleWritable(rating.get());
+    if (rating.get() <= 2) {
+      return new DoubleWritable(0);
+    }
+    else {
+      return new DoubleWritable(1);
+    }
   }
 
   public int getNodeId() {
