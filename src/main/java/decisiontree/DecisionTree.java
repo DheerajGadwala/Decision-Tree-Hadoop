@@ -640,12 +640,12 @@ public class DecisionTree extends Configured implements Tool {
   }
 
   public static void main(final String[] args) {
-    if (args.length != 9) {
-      throw new Error("Nine arguments required");
+    if (args.length != 12) {
+      throw new Error("Twelve arguments required");
     }
     try {
       ToolRunner.run(new DecisionTree(), args);
-      //ToolRunner.run(new DecisionTreeTest(), args);
+      ToolRunner.run(new DecisionTreeTest(), args);
     } catch (final Exception e) {
       logger.error("", e);
     }
