@@ -20,13 +20,13 @@ These components are installed:
 
 Environment
 -----------
-1) Example ~/.bash_aliases: export JAVA_HOME="/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home"
-   export HADOOP_HOME="/Users/shreyasingh/hadoop2.10/hadoop-2.10.1"
-   export YARN_CONF_DIR=$HADOOP_HOME/etc/hadoop
-   export PYENV_ROOT="$HOME/.pyenv"
-   export PATH=$JAVA_HOME/bin:/Users/shreyasingh/apache-maven-3.8.4/bin:$HADOOP_HOME/bin:$HADOOP_HOME/sbin:$SCALA_HOME/bin:$SPARK_HOME/bin:$PYENV_ROOT/bin:/opt/homebrew/bin:$PATH
+1) Example ~/.bash_aliases: export JAVA_HOME="/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home"<br>
+   export HADOOP_HOME="/Users/shreyasingh/hadoop2.10/hadoop-2.10.1"<br>
+   export YARN_CONF_DIR=$HADOOP_HOME/etc/hadoop<br>
+   export PYENV_ROOT="$HOME/.pyenv"<br>
+   export PATH=$JAVA_HOME/bin:/Users/shreyasingh/apache-maven3.8.4/bin:$HADOOP_HOME/bin:$HADOOP_HOME/sbin:$SCALA_HOME/bin:$SPARK_HOME/bin:$PYENV_ROOT/bin:/opt/homebrew/bin:$PATH
 
-2) Explicitly set JAVA_HOME in $HADOOP_HOME/etc/hadoop/hadoop-env.sh:
+2) Explicitly set JAVA_HOME in $HADOOP_HOME/etc/hadoop/hadoop-env.sh:<br>
    export JAVA_HOME="/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home"
 
 Execution
