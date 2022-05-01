@@ -257,11 +257,13 @@ public class DecisionTreeTest extends Configured implements Tool {
     FileOutputFormat.setOutputPath(job, new Path("output"));
     job.addCacheFile(new Path(broadcastSplits + "/data").toUri());
 
-    job.waitForCompletion(true);
+    int res = job.waitForCompletion(true) ? 1 : 0;
+
     long count = job.getCounters().findCounter(Counter.Record_Count).getValue();
     logger.info("*****************************");
     logger.info(count);
     logger.info("*****************************");
-    return 1;
+
+    return res;
   }
 }

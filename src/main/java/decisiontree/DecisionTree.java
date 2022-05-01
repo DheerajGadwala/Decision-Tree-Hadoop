@@ -636,12 +636,13 @@ public class DecisionTree extends Configured implements Tool {
 
     // Read the files from splitsFolder and put it in single file.
     ReadSplitsBeforeBroadcast(layerCount);
+
     return layerCount;
   }
 
   public static void main(final String[] args) {
-    if (args.length != 9) {
-      throw new Error("Nine arguments required");
+    if (args.length != 12) {
+      throw new Error("12 arguments required");
     }
     try {
       ToolRunner.run(new DecisionTree(), args);
