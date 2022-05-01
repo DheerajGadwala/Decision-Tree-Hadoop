@@ -20,18 +20,16 @@ import java.util.*;
 
 public class DecisionTreeTest extends Configured implements Tool {
   private static Node[] tree; // Trained decision tree [broadcast]
-
   String testInput, testSample, broadcastSplits;
-
   double sampleSize;
 
   enum Counter {
     Record_Count
   }
+
   private static final Logger logger = LogManager.getLogger(DecisionTreeTest.class); // log
 
   public static class Node {
-
     int nodeId;
     int featureId;
     double splitPoint;
@@ -229,6 +227,8 @@ public class DecisionTreeTest extends Configured implements Tool {
     testSample = args[3];
     broadcastSplits = args[7];
     sampleSize = Double.parseDouble(args[11]);
+
+    DecisionTree.sampleJob(getConf(), testInput, testSample, sampleSize);
 
     // Configuration
     final Configuration conf = super.getConf();

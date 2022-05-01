@@ -9,15 +9,14 @@ import java.io.IOException;
 import static java.util.Objects.hash;
 
 /**
- * Represents a record in the input.
- * Each record has an id, a rating and features along with their values.
+ * Represents a record after the split is decided.
  */
 public class DTKey implements WritableComparable<DTKey> {
 
   BooleanWritable dummy;
-  IntWritable split;
-  DoubleWritable splitPoint;
-  IntWritable featureId;
+  IntWritable split; // 0 if left; 1 if right
+  DoubleWritable splitPoint; // best split point for the current node.
+  IntWritable featureId; // feature id used
   IntWritable nodeId;
 
   public DTKey() {
