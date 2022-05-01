@@ -26,7 +26,7 @@ hdfs.output=output
 # AWS EMR Execution
 aws.emr.release=emr-5.17.0# previous version 5.17.0 | edit this with current EMR version.
 aws.region=us-east-1
-aws.bucket.name=savdt1405# edit this with your bucket name (from S3) for the project.
+aws.bucket.name=drgad24dt# edit this with your bucket name (from S3) for the project.
 aws.subnet.id=subnet-6356553a# no need to edit this
 aws.trainInput=train
 aws.testInput=test
@@ -37,7 +37,7 @@ aws.treeLevel=treeLevel
 aws.splits=splits
 aws.broadcastSplits=broadcastSplits
 aws.leafNodes=leafNodes
-aws.varianceCap=0.08
+aws.varianceCap=0.01
 aws.maxDepth=13
 aws.sampleSize=2
 aws.log.dir=logMR
@@ -116,20 +116,32 @@ pseudoq: jar clean-local-output clean-hdfs-output
 make-bucket:
 	aws s3 mb s3://${aws.bucket.name}
 
-# Upload data to S3 input dir.
-upload-input-aws: make-bucket
+# Upload broadcast splits data to S3
+upload-input-aws-broadcastSplits: make-bucket
 	aws s3 sync ${local.broadcastSplits} s3://${aws.bucket.name}/${aws.broadcastSplits}
-	#aws s3 sync ${local.testInput} s3://${aws.bucket.name}/${aws.testInput}
-	#aws s3 sync ${local.trainInput} s3://${aws.bucket.name}/${aws.trainInput}
+
+# Upload test and train data to S3
+upload-input-aws-TrainTest: make-bucket
+	aws s3 sync ${local.testInput} s3://${aws.bucket.name}/${aws.testInput}
+	aws s3 sync ${local.trainInput} s3://${aws.bucket.name}/${aws.trainInput}
 
 # Delete S3 output dir.
-delete-output-aws:
+delete-output-aws-train:
 	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.trainSample}*"
 	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.testSample}*"
 	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.levelData}*"
 	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.treeLevel}*"
 	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.splits}*"
-	#aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.broadcastSplits}*"
+	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.broadcastSplits}*"
+	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.leafNodes}*"
+
+# Delete S3 output dir.
+delete-output-aws-test:
+	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.trainSample}*"
+	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.testSample}*"
+	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.levelData}*"
+	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.treeLevel}*"
+	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.splits}*"
 	aws s3 rm s3://${aws.bucket.name}/ --recursive --exclude "*" --include "${aws.leafNodes}*"
 
 # Upload application to S3 bucket.
@@ -137,9 +149,21 @@ upload-app-aws:
 	aws s3 cp ${jar.path} s3://${aws.bucket.name}
 
 # Main EMR launch.
-aws: jar upload-app-aws delete-output-aws
+aws-train: jar upload-app-aws delete-output-aws-train
 	aws emr create-cluster \
-		--name "Decision Tree" \
+		--name "Decision Tree Train" \
+		--release-label ${aws.emr.release} \
+		--instance-groups '[{"InstanceCount":${aws.num.nodes},"InstanceGroupType":"CORE","InstanceType":"${aws.instance.type}"},{"InstanceCount":1,"InstanceGroupType":"MASTER","InstanceType":"${aws.instance.type}"}]' \
+	    --applications Name=Hadoop \
+	    --steps '[{"Args":["${job.name}","s3://${aws.bucket.name}/${aws.trainInput}","s3://${aws.bucket.name}/${aws.testInput}","s3://${aws.bucket.name}/${aws.trainSample}","s3://${aws.bucket.name}/${aws.testSample}","s3://${aws.bucket.name}/${aws.levelData}","s3://${aws.bucket.name}/${aws.treeLevel}","s3://${aws.bucket.name}/${aws.splits}","s3://${aws.bucket.name}/${aws.broadcastSplits}","s3://${aws.bucket.name}/${aws.leafNodes}","${aws.varianceCap}","${aws.maxDepth}","${aws.sampleSize}"],"Type":"CUSTOM_JAR","Jar":"s3://${aws.bucket.name}/${jar.name}","ActionOnFailure":"TERMINATE_CLUSTER","Name":"Custom JAR"}]' \
+		--log-uri s3://${aws.bucket.name}/${aws.log.dir} \
+		--use-default-roles \
+		--enable-debugging \
+		--auto-terminate
+
+aws-test: jar upload-app-aws delete-output-aws-test
+	aws emr create-cluster \
+		--name "Decision Tree Test" \
 		--release-label ${aws.emr.release} \
 		--instance-groups '[{"InstanceCount":${aws.num.nodes},"InstanceGroupType":"CORE","InstanceType":"${aws.instance.type}"},{"InstanceCount":1,"InstanceGroupType":"MASTER","InstanceType":"${aws.instance.type}"}]' \
 	    --applications Name=Hadoop \
