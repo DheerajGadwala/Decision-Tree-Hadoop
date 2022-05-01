@@ -26,7 +26,8 @@ public class DecisionTreeTest extends Configured implements Tool {
 
   // Counter to count the number of records.
   enum Counter {
-    Record_Count
+    Record_Count,
+    Accuracy
   }
 
   private static final Logger logger = LogManager.getLogger(DecisionTreeTest.class); // log
@@ -237,6 +238,9 @@ public class DecisionTreeTest extends Configured implements Tool {
         for (IntWritable val : values) {
           count += val.get();
         }
+        double res = count/totalPredictions * 100;
+        context.getCounter(Counter.Accuracy).setValue((long) res);
+
         logger.info("*******************************");
         logger.info("Total : " + totalPredictions);
         logger.info("count : " + count);
@@ -281,7 +285,7 @@ public class DecisionTreeTest extends Configured implements Tool {
 
     MultipleInputs.addInputPath(job, new Path(testInput), TextInputFormat.class,
         DecisionTreeTest.ReadSplits.class);
-//    FileOutputFormat.setOutputPath(job, new Path("output"));
+    FileOutputFormat.setOutputPath(job, new Path("output"));
     job.addCacheFile(new Path(broadcastSplits + "/data").toUri());
 
     int res = job.waitForCompletion(true) ? 1 : 0;
