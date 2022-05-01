@@ -52,9 +52,9 @@ public class DecisionTreeTest extends Configured implements Tool {
 
       StringBuilder sb = new StringBuilder();
       sb.append(nodeId)
-          .append(" ")
-          .append(featureId).append(" ")
-          .append(splitPoint).append(" ");
+              .append(" ")
+              .append(featureId).append(" ")
+              .append(splitPoint).append(" ");
       sb.append(mean);
       return sb.toString();
     }
@@ -150,7 +150,7 @@ public class DecisionTreeTest extends Configured implements Tool {
 
     @Override
     public void map(final Object key, final Text value, final Context context)
-        throws IOException, InterruptedException {
+            throws IOException, InterruptedException {
       final StringTokenizer itr = new StringTokenizer(value.toString(), "\n", false);
 
       while (itr.hasMoreTokens()) {
@@ -259,7 +259,7 @@ public class DecisionTreeTest extends Configured implements Tool {
     String broadcastSplits = args[7];
     double sampleSize = Double.parseDouble(args[11]);
 
-    // Sample the test data set.
+    // 1. Sample the test data set.
     DecisionTree.sampleJob(getConf(), testInput, testSample, sampleSize);
 
     // Configuration
@@ -272,19 +272,17 @@ public class DecisionTreeTest extends Configured implements Tool {
     jobConf.set("mapreduce.output.textoutputformat.separator", "\t");
 
     // Set up job's configuration.
-    job.setMapperClass(ReadSplits.class);
+    MultipleInputs.addInputPath(job, new Path(testSample), TextInputFormat.class, DecisionTreeTest.ReadSplits.class);
     job.setMapOutputKeyClass(Text.class);
     job.setMapOutputValueClass(IntWritable.class);
-    job.setSortComparatorClass(CustomComp.class);
-    job.setGroupingComparatorClass(CustomComp.class);
-    job.setPartitionerClass(CustomPartitioner.class);
-    job.setReducerClass(EvaluateAccuracy.class);
     job.setCombinerClass(CustomCombiner.class);
+    job.setSortComparatorClass(CustomComp.class);
+    job.setGroupingComparatorClass(CustomComp.class); // Send dummy nodes first.
+    job.setPartitionerClass(CustomPartitioner.class); // Send all the records to single reduce task
+    job.setReducerClass(EvaluateAccuracy.class); // Calculate Accuracy
 
     job.setNumReduceTasks(1);
 
-    MultipleInputs.addInputPath(job, new Path(testInput), TextInputFormat.class,
-        DecisionTreeTest.ReadSplits.class);
     FileOutputFormat.setOutputPath(job, new Path("output"));
     job.addCacheFile(new Path(broadcastSplits + "/data").toUri());
 
