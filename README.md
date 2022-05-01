@@ -13,7 +13,7 @@ Dheeraj Gadwala, Savitha Munirajaiah, Shreya Singh
 Installation
 ------------
 These components are installed:
-- JDK 1.8
+- OpenJDK 14
 - Hadoop 2.9.1
 - Maven
 - AWS CLI (for EMR execution)
